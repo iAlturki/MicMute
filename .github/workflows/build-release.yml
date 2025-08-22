@@ -2,11 +2,8 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
-      - master
     tags:
-      - 'v*'  # Also triggers on version tags
+      - 'v*'  # Only triggers on version tags for releases
   workflow_dispatch:  # Allows manual trigger
 
 permissions:
@@ -24,75 +21,67 @@ jobs:
     - name: Setup Visual Studio environment
       uses: microsoft/setup-msbuild@v2
       
-    - name: Build application
+    - name: Build single executable
       run: |
         # Create build directory
         if (!(Test-Path "build")) { New-Item -ItemType Directory -Path "build" }
         
-        # Setup Visual Studio environment and build
-        cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /EHsc /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib'
+        # Setup Visual Studio environment and build with embedded resources
+        cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /EHsc /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib /link /SUBSYSTEM:WINDOWS'
         
         # Clean up build artifacts  
         Remove-Item -Path "*.obj" -ErrorAction SilentlyContinue
         Remove-Item -Path "build\*.res" -ErrorAction SilentlyContinue
       
-    - name: Check if executable exists
+    - name: Verify build
       run: |
         if (Test-Path "build\iAlturki-MicMute.exe") {
-          Write-Host "✅ Executable built successfully"
-          Get-Item "build\iAlturki-MicMute.exe" | Select-Object Name, Length, LastWriteTime
+          Write-Host "✅ Single executable built successfully"
+          $file = Get-Item "build\iAlturki-MicMute.exe"
+          Write-Host "📦 Size: $($file.Length) bytes"
+          Write-Host "📅 Built: $($file.LastWriteTime)"
         } else {
           Write-Host "❌ Executable not found"
           exit 1
         }
-      
-    - name: Upload build artifacts
-      if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
-      uses: actions/upload-artifact@v4
-      with:
-        name: iAlturki-MicMute-dev-${{ github.sha }}
-        path: |
-          build/iAlturki-MicMute.exe
-          Mic_Muted_icon.ico
-          README.md
-        retention-days: 30
         
-    - name: Create release
-      if: startsWith(github.ref, 'refs/tags/')
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          build/iAlturki-MicMute.exe
-          Mic_Muted_icon.ico
-          README.md
+        files: build/iAlturki-MicMute.exe
         name: iAlturki-MicMute ${{ github.ref_name }}
         body: |
-          ## iAlturki-MicMute ${{ github.ref_name }}
+          ## 🎙️ iAlturki-MicMute ${{ github.ref_name }}
           
-          High-performance microphone mute/unmute utility built with C and Windows API.
+          **Single-file microphone mute utility for Windows**
           
-          ### Features:
-          - 🎯 Global hotkey support (F8 default)
-          - 🔧 System tray integration
-          - 👁️ Overlay visual indicator with 9 position options
-          - 🔊 Audio feedback (customizable)
-          - 🚀 Auto-start with Windows
-          - 💾 Persistent settings storage
-          - ⚡ Minimal resource usage (~125KB)
-          - 🎮 Fullscreen game overlay support
+          ### ⚡ Quick Start
+          1. Download `iAlturki-MicMute.exe` 
+          2. Run the executable
+          3. Press **F8** to toggle mute/unmute
           
-          ### Installation:
-          1. Download `iAlturki-MicMute.exe`
-          2. Download `Mic_Muted_icon.ico` (place in same folder as exe)
-          3. Run the executable
-          4. Use F8 to toggle microphone mute/unmute
+          ### 🎯 Features
+          - Global hotkey support (F8 default, customizable)
+          - System tray integration with context menu
+          - Visual overlay indicator (9 positions, 5 sizes)
+          - Audio feedback with Windows notification sounds
+          - Multi-monitor support
+          - Auto-start with Windows option
+          - Persistent settings storage
           
-          ### System Requirements:
+          ### 📋 Requirements
           - Windows 10/11 (64-bit)
-          - ~125KB disk space
-          - Minimal system resources
+          - ~140KB disk space
+          - No additional files needed
           
-          **Built with:** C, Windows API, Visual Studio 2022
+          ### 🔧 Settings
+          Right-click system tray icon to access:
+          - Hotkey options (F1-F12, Ctrl+M)
+          - Overlay size and position
+          - Audio feedback settings
+          - Startup configuration
+          
+          **Self-contained executable with embedded icon and resources**
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}

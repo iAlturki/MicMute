@@ -14,9 +14,10 @@
 ## Installation
 
 1. Download `iAlturki-MicMute.exe` from [Releases](../../releases)
-2. Download `Mic_Muted_icon.ico` and place in same folder
-3. Run the executable
-4. Press F8 to mute/unmute your microphone
+2. Run the executable  
+3. Press F8 to mute/unmute your microphone
+
+*Single-file application - no additional files needed*
 
 ## System Requirements
 
