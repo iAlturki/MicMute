@@ -2,6 +2,26 @@
 
 🎙️ Simple microphone mute utility for Windows with visual overlay and hotkey support.
 
+[![Download Latest Release](https://img.shields.io/github/v/release/iAlturki/MicMute?label=Download&style=for-the-badge&color=brightgreen)](https://github.com/iAlturki/MicMute/releases/latest/download/iAlturki-MicMute.exe)
+
+## Features
+
+- **Hotkey toggle** - F8 (default) or Ctrl+M to mute/unmute instantly
+- **Visual overlay** - Shows mute status on screen (9 positions, 5 sizes)
+- **System tray** - Right-click for settings, double-click to toggle
+- **Audio feedback** - Windows notification sounds
+- **Multi-monitor** - Works across all displays
+- **Startup support** - Auto-start with Windows
+
+## Installation
+
+1. Download `iAlturki-MicMute.exe` from [Releases](../../releases)
+2. Run it  
+3. Press F8 to mute/unmute your microphone
+
+*Single-file application - no additional files needed*
+🎙️ Simple microphone mute utility for Windows with visual overlay and hotkey support.
+
 ## Features
 
 - **Hotkey toggle** - F8 (default) or Ctrl+M to mute/unmute instantly

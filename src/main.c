@@ -48,9 +48,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
     
-    // Restore last mute state
-    if (g_appState.settings.lastMuteState != g_appState.isMuted) {
-        ToggleMicrophone();
+    // Check actual microphone state and sync with saved state
+    BOOL actualMuteState;
+    if (g_appState.pEndpointVolume && 
+        SUCCEEDED(g_appState.pEndpointVolume->lpVtbl->GetMute(g_appState.pEndpointVolume, &actualMuteState))) {
+        g_appState.isMuted = actualMuteState;
+        
+        // Show overlay immediately if currently muted
+        if (actualMuteState) {
+            ShowOverlay(TRUE);
+        }
+        
+        // Update tray icon to reflect current state
+        UpdateTrayIcon(actualMuteState);
+        
+        // Save the actual state
+        g_appState.settings.lastMuteState = actualMuteState;
+    } else {
+        // Fallback: restore last saved state if we can't read current state
+        if (g_appState.settings.lastMuteState != g_appState.isMuted) {
+            ToggleMicrophone();
+        }
     }
     
     // Initialize system tray
