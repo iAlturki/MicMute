@@ -53,35 +53,20 @@ jobs:
         body: |
           ## 🎙️ iAlturki-MicMute ${{ github.ref_name }}
           
-          **Single-file microphone mute utility for Windows**
+          Simple microphone mute utility for Windows.
           
-          ### ⚡ Quick Start
-          1. Download `iAlturki-MicMute.exe` 
-          2. Run the executable
-          3. Press **F8** to toggle mute/unmute
+          **Installation:**
+          1. Download `iAlturki-MicMute.exe`
+          2. Run it
+          3. Press **F8** to mute/unmute
           
-          ### 🎯 Features
-          - Global hotkey support (F8 default, customizable)
-          - System tray integration with context menu
-          - Visual overlay indicator (9 positions, 5 sizes)
-          - Audio feedback with Windows notification sounds
-          - Multi-monitor support
-          - Auto-start with Windows option
-          - Persistent settings storage
+          **Key Features:**
+          - Global hotkey (F8 default)
+          - System tray icon
+          - Visual overlay when muted
+          - Works on Windows 10/11
           
-          ### 📋 Requirements
-          - Windows 10/11 (64-bit)
-          - ~140KB disk space
-          - No additional files needed
-          
-          ### 🔧 Settings
-          Right-click system tray icon to access:
-          - Hotkey options (F1-F12, Ctrl+M)
-          - Overlay size and position
-          - Audio feedback settings
-          - Startup configuration
-          
-          **Self-contained executable with embedded icon and resources**
+          Single file, no setup required.
         draft: false
         prerelease: false
         token: ${{ secrets.GITHUB_TOKEN }}
