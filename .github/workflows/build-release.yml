@@ -69,4 +69,4 @@ jobs:
           Single file, no setup required.
         draft: false
         prerelease: false
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ github.token }}
