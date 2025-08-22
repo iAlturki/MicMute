@@ -9,6 +9,10 @@ on:
       - 'v*'  # Also triggers on version tags
   workflow_dispatch:  # Allows manual trigger
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build:
     runs-on: windows-latest
@@ -55,7 +59,7 @@ jobs:
         
     - name: Create release
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: |
           build/iAlturki-MicMute.exe
@@ -91,5 +95,4 @@ jobs:
           **Built with:** C, Windows API, Visual Studio 2022
         draft: false
         prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
