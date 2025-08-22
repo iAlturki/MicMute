@@ -35,18 +35,24 @@ BOOL CreateMainWindow(HINSTANCE hInstance)
 
 void LoadIconFromFile(void)
 {
-    wchar_t iconPath[MAX_PATH];
+    // First try loading from embedded resource
+    g_appState.hMutedIcon = (HICON)LoadImageW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1), IMAGE_ICON,
+        g_appState.settings.overlaySize, g_appState.settings.overlaySize, 
+        LR_DEFAULTSIZE);
     
-    // First try loading from the same directory as the exe
-    GetModuleFileNameW(NULL, iconPath, MAX_PATH);
-    wchar_t* lastSlash = wcsrchr(iconPath, L'\\');
-    if (lastSlash) {
-        *(lastSlash + 1) = L'\0';
-        wcscat_s(iconPath, MAX_PATH, L"Mic_Muted_icon.ico");
-        
-        g_appState.hMutedIcon = (HICON)LoadImageW(NULL, iconPath, IMAGE_ICON, 
-            g_appState.settings.overlaySize, g_appState.settings.overlaySize, 
-            LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    // If resource loading fails, try loading from file in exe directory
+    if (!g_appState.hMutedIcon) {
+        wchar_t iconPath[MAX_PATH];
+        GetModuleFileNameW(NULL, iconPath, MAX_PATH);
+        wchar_t* lastSlash = wcsrchr(iconPath, L'\\');
+        if (lastSlash) {
+            *(lastSlash + 1) = L'\0';
+            wcscat_s(iconPath, MAX_PATH, L"Mic_Muted_icon.ico");
+            
+            g_appState.hMutedIcon = (HICON)LoadImageW(NULL, iconPath, IMAGE_ICON, 
+                g_appState.settings.overlaySize, g_appState.settings.overlaySize, 
+                LR_LOADFROMFILE | LR_DEFAULTSIZE);
+        }
     }
     
     // If that fails, try current directory
@@ -56,17 +62,10 @@ void LoadIconFromFile(void)
             LR_LOADFROMFILE | LR_DEFAULTSIZE);
     }
     
-    // If still no icon, try loading the original without sizing
+    // If still no icon, try loading the embedded resource without sizing
     if (!g_appState.hMutedIcon) {
-        GetModuleFileNameW(NULL, iconPath, MAX_PATH);
-        lastSlash = wcsrchr(iconPath, L'\\');
-        if (lastSlash) {
-            *(lastSlash + 1) = L'\0';
-            wcscat_s(iconPath, MAX_PATH, L"Mic_Muted_icon.ico");
-            
-            g_appState.hMutedIcon = (HICON)LoadImageW(NULL, iconPath, IMAGE_ICON, 
-                0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
-        }
+        g_appState.hMutedIcon = (HICON)LoadImageW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1), IMAGE_ICON,
+            0, 0, LR_DEFAULTSIZE);
     }
 }
 
