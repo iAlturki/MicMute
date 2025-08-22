@@ -1,0 +1,50 @@
+# Build outputs
+build/
+*.exe
+*.obj
+*.lib
+*.pdb
+*.ilk
+*.map
+*.res
+
+# Visual Studio files
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.bsc
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.vssscc
+
+# Windows temp files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Backup files
+*.bak
+*.tmp
+*.temp
+*~
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+
+# Debug files
+*.dmp

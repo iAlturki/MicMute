@@ -1,0 +1,81 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0, v1.1, etc.
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Visual Studio environment
+      uses: microsoft/setup-msbuild@v2
+      
+    - name: Build application
+      run: |
+        # Create build directory
+        if (!(Test-Path "build")) { New-Item -ItemType Directory -Path "build" }
+        
+        # Setup Visual Studio environment and build
+        cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /EHsc /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib'
+        
+        # Clean up build artifacts  
+        Remove-Item -Path "*.obj" -ErrorAction SilentlyContinue
+        Remove-Item -Path "build\*.res" -ErrorAction SilentlyContinue
+      
+    - name: Check if executable exists
+      run: |
+        if (Test-Path "build\iAlturki-MicMute.exe") {
+          Write-Host "✅ Executable built successfully"
+          Get-Item "build\iAlturki-MicMute.exe" | Select-Object Name, Length, LastWriteTime
+        } else {
+          Write-Host "❌ Executable not found"
+          exit 1
+        }
+      
+    - name: Create release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          build/iAlturki-MicMute.exe
+          Mic_Muted_icon.ico
+          README.md
+        name: iAlturki-MicMute ${{ github.ref_name }}
+        body: |
+          ## iAlturki-MicMute ${{ github.ref_name }}
+          
+          High-performance microphone mute/unmute utility built with C and Windows API.
+          
+          ### Features:
+          - 🎯 Global hotkey support (F8 default)
+          - 🔧 System tray integration
+          - 👁️ Overlay visual indicator with 9 position options
+          - 🔊 Audio feedback (customizable)
+          - 🚀 Auto-start with Windows
+          - 💾 Persistent settings storage
+          - ⚡ Minimal resource usage (~125KB)
+          - 🎮 Fullscreen game overlay support
+          
+          ### Installation:
+          1. Download `iAlturki-MicMute.exe`
+          2. Download `Mic_Muted_icon.ico` (place in same folder as exe)
+          3. Run the executable
+          4. Use F8 to toggle microphone mute/unmute
+          
+          ### System Requirements:
+          - Windows 10/11 (64-bit)
+          - ~125KB disk space
+          - Minimal system resources
+          
+          **Built with:** C, Windows API, Visual Studio 2022
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
