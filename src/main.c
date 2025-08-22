@@ -1,9 +1,20 @@
 #include "micmute.h"
 
 AppState g_appState = {0};
+HANDLE g_hMutex = NULL;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+    // Check for single instance
+    g_hMutex = CreateMutexW(NULL, TRUE, L"iAlturki-MicMute-SingleInstance");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        MessageBoxW(NULL, L"iAlturki-MicMute is already running!", L"Already Running", MB_OK | MB_ICONINFORMATION);
+        if (g_hMutex) {
+            CloseHandle(g_hMutex);
+        }
+        return 0;
+    }
+    
     // Initialize COM
     CoInitialize(NULL);
     
@@ -17,6 +28,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Create main window
     if (!CreateMainWindow(hInstance)) {
         MessageBoxW(NULL, L"Failed to create window", L"Error", MB_OK | MB_ICONERROR);
+        if (g_hMutex) {
+            ReleaseMutex(g_hMutex);
+            CloseHandle(g_hMutex);
+        }
         return 1;
     }
     
@@ -26,12 +41,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     // Initialize audio
     if (!InitializeAudio()) {
         MessageBoxW(NULL, L"Failed to initialize audio", L"Error", MB_OK | MB_ICONERROR);
+        if (g_hMutex) {
+            ReleaseMutex(g_hMutex);
+            CloseHandle(g_hMutex);
+        }
         return 1;
+    }
+    
+    // Restore last mute state
+    if (g_appState.settings.lastMuteState != g_appState.isMuted) {
+        ToggleMicrophone();
     }
     
     // Initialize system tray
     if (!InitializeSystemTray(g_appState.hWnd, hInstance)) {
         MessageBoxW(NULL, L"Failed to initialize system tray", L"Error", MB_OK | MB_ICONERROR);
+        if (g_hMutex) {
+            ReleaseMutex(g_hMutex);
+            CloseHandle(g_hMutex);
+        }
         return 1;
     }
     
@@ -54,10 +82,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     CleanupSystemTray();
     CleanupAudio();
     CleanupMultiMonitorOverlay();
+    
+    // Save current state before exit
+    g_appState.settings.lastMuteState = g_appState.isMuted;
     SaveSettings();
     
     if (g_appState.hMutedIcon) {
         DestroyIcon(g_appState.hMutedIcon);
+    }
+    
+    // Release single instance mutex
+    if (g_hMutex) {
+        ReleaseMutex(g_hMutex);
+        CloseHandle(g_hMutex);
     }
     
     CoUninitialize();

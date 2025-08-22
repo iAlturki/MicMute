@@ -148,6 +148,7 @@ typedef struct {
     BOOL volumeLockEnabled;
     float lockedVolume;
     int volumeCheckInterval; // for more reliable volume lock
+    BOOL lastMuteState; // Remember last mute state
 } AppSettings;
 
 // Global state

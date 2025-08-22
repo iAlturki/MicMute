@@ -20,6 +20,7 @@ void InitializeDefaultSettings(void)
     g_appState.settings.volumeLockEnabled = FALSE;
     g_appState.settings.lockedVolume = 1.0f;
     g_appState.settings.volumeCheckInterval = 500; // Check every 500ms for more reliability
+    g_appState.settings.lastMuteState = FALSE; // Default to unmuted
 }
 
 void LoadSettings(void)
@@ -42,6 +43,7 @@ void LoadSettings(void)
         RegQueryValueExW(hKey, L"CustomHotkeyVK", NULL, &dwType, (LPBYTE)&g_appState.settings.customHotkeyVK, &dwSize);
         RegQueryValueExW(hKey, L"VolumeLockEnabled", NULL, &dwType, (LPBYTE)&g_appState.settings.volumeLockEnabled, &dwSize);
         RegQueryValueExW(hKey, L"VolumeCheckInterval", NULL, &dwType, (LPBYTE)&g_appState.settings.volumeCheckInterval, &dwSize);
+        RegQueryValueExW(hKey, L"LastMuteState", NULL, &dwType, (LPBYTE)&g_appState.settings.lastMuteState, &dwSize);
         
         dwSize = sizeof(float);
         RegQueryValueExW(hKey, L"LockedVolume", NULL, &dwType, (LPBYTE)&g_appState.settings.lockedVolume, &dwSize);
@@ -73,6 +75,7 @@ void SaveSettings(void)
         RegSetValueExW(hKey, L"VolumeLockEnabled", 0, REG_DWORD, (LPBYTE)&g_appState.settings.volumeLockEnabled, sizeof(DWORD));
         RegSetValueExW(hKey, L"VolumeCheckInterval", 0, REG_DWORD, (LPBYTE)&g_appState.settings.volumeCheckInterval, sizeof(DWORD));
         RegSetValueExW(hKey, L"StartupEnabled", 0, REG_DWORD, (LPBYTE)&g_appState.settings.startupEnabled, sizeof(DWORD));
+        RegSetValueExW(hKey, L"LastMuteState", 0, REG_DWORD, (LPBYTE)&g_appState.settings.lastMuteState, sizeof(DWORD));
         RegSetValueExW(hKey, L"LockedVolume", 0, REG_BINARY, (LPBYTE)&g_appState.settings.lockedVolume, sizeof(float));
         
         RegCloseKey(hKey);

@@ -66,6 +66,11 @@ void ToggleMicrophone(void)
     
     if (SUCCEEDED(hr)) {
         g_appState.isMuted = newMute;
+        
+        // Save the new state immediately
+        g_appState.settings.lastMuteState = newMute;
+        SaveSettings();
+        
         UpdateTrayIcon(newMute);
         
         // Show overlay when muted, hide when unmuted
