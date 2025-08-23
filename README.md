@@ -12,7 +12,7 @@
 
 - **System tray** – Right-click for settings, double-click to toggle  
   ![System tray demo](https://github.com/user-attachments/assets/adcf059f-1e02-4cf3-af1d-1fc4e3204246)
-
+  </br>Blue info icon means Mic is UNmuted, Red x icon means Mic is Muted.
 - **Audio feedback** – Windows notification sounds
 - **Multi-monitor** – Works across all displays
 - **Startup support** – Auto-start with Windows
