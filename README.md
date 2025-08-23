@@ -6,12 +6,17 @@
 
 ## Features
 
-- **Hotkey toggle** - F8 (default) or Ctrl+M to mute/unmute instantly
-- **Visual overlay** - Shows mute status on screen (9 positions, 5 sizes)
-- **System tray** - Right-click for settings, double-click to toggle
-- **Audio feedback** - Windows notification sounds
-- **Multi-monitor** - Works across all displays
-- **Startup support** - Auto-start with Windows
+- **Hotkey toggle** – F8 (default) or Ctrl+M to mute/unmute instantly
+- **Visual overlay** – Shows mute status on screen (9 positions, 5 sizes)  
+  ![Mic muted overlay](https://github.com/user-attachments/assets/aebf26d1-4704-4326-8dff-d91f102d7f8b)
+
+- **System tray** – Right-click for settings, double-click to toggle  
+  ![System tray demo](https://github.com/user-attachments/assets/adcf059f-1e02-4cf3-af1d-1fc4e3204246)
+
+- **Audio feedback** – Windows notification sounds
+- **Multi-monitor** – Works across all displays
+- **Startup support** – Auto-start with Windows
+
 
 ## Installation
 
