@@ -143,8 +143,41 @@ static void Present(Overlay* o, BYTE alpha, int yOff)
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA};
     UpdateLayeredWindow(o->hwnd, NULL, &dst, &sz, o->memDC, &src, 0, &bf, ULW_ALPHA);
     if (!o->shown) {
-        ShowWindow(o->hwnd, SW_SHOWNOACTIVATE);
+        // Show and re-assert top of the topmost band in one call, so the
+        // badge surfaces above fullscreen windows already on screen.
+        SetWindowPos(o->hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         o->shown = TRUE;
+    }
+}
+
+// Fullscreen apps that activate later insert above us in the topmost band;
+// lift the badge back to the top whenever the foreground window changes.
+// Event-driven (WinEvent hook), so nothing ticks while muted-steady.
+static HWINEVENTHOOK g_fgHook;
+
+static void TopmostAll(void)
+{
+    for (int i = 0; i < g_ovCount; i++)
+        if (g_ov[i].shown)
+            SetWindowPos(g_ov[i].hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+static void CALLBACK FgChanged(HWINEVENTHOOK h, DWORD ev, HWND hwnd,
+                               LONG idObject, LONG idChild, DWORD tid, DWORD time)
+{
+    if (g_visible) TopmostAll();
+}
+
+static void HookForeground(BOOL on)
+{
+    if (on && !g_fgHook)
+        g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                                   NULL, FgChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+    else if (!on && g_fgHook) {
+        UnhookWinEvent(g_fgHook);
+        g_fgHook = NULL;
     }
 }
 
@@ -165,6 +198,7 @@ static void HideAll(void)
         }
     g_visible = FALSE;
     g_isFlash = FALSE;
+    HookForeground(FALSE);
 }
 
 static void StopAnim(void)
@@ -250,6 +284,7 @@ void OverlayShowMuted(BOOL animate)
     }
     g_visible = TRUE;
     g_isFlash = FALSE;
+    HookForeground(TRUE);
     if (animate) { PresentAll(0, 1.0f); StartAnim(AN_FADE_IN, 15); }
     else         { PresentAll(255, 0);  StartAnim(AN_WAIT_BG, BG_HOLD_MS); }
 }
@@ -281,12 +316,14 @@ void OverlayRebuild(void)
     g_ovCount = 0;
     g_visible = FALSE;
     g_isFlash = FALSE;
+    HookForeground(FALSE);
     if (g_appState.isMuted) OverlayShowMuted(FALSE);
 }
 
 void OverlayCleanup(void)
 {
     StopAnim();
+    HookForeground(FALSE);
     for (int i = 0; i < g_ovCount; i++) DestroyOverlay(&g_ov[i]);
     g_ovCount = 0;
 }

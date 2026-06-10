@@ -27,7 +27,7 @@ jobs:
         if (!(Test-Path "build")) { New-Item -ItemType Directory -Path "build" }
 
         # Setup Visual Studio environment and build with embedded resources
-        cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS'
+        cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS /MANIFEST:NO'
 
         # Clean up build artifacts
         Remove-Item -Path "*.obj" -ErrorAction SilentlyContinue

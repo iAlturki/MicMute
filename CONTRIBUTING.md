@@ -12,7 +12,7 @@ GitHub Actions automatically builds releases. For local development you need Vis
 ```bat
 mkdir build
 rc /fo build\resources.res src\resources.rc
-cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS
+cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS /MANIFEST:NO
 ```
 
 This produces a single `build\iAlturki-MicMute.exe` with no external dependencies.

@@ -36,6 +36,12 @@ BOOL TrayInit(HWND hwnd)
 {
     if (!g_taskbarCreated)
         g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+
+    // The process runs elevated; Explorer (medium IL) must be allowed
+    // through UIPI or tray clicks and TaskbarCreated never arrive.
+    ChangeWindowMessageFilterEx(hwnd, WM_APP_TRAY, MSGFLT_ALLOW, NULL);
+    ChangeWindowMessageFilterEx(hwnd, g_taskbarCreated, MSGFLT_ALLOW, NULL);
+
     if (!g_iconMuted) BuildIcons();
 
     ZeroMemory(&g_nid, sizeof(g_nid));
@@ -93,6 +99,7 @@ static void AddItem(HMENU m, UINT id, const wchar_t* text, BOOL checked)
 
 void TrayShowMenu(HWND hwnd, POINT pt)
 {
+    g_appState.settings.startupEnabled = IsStartupEnabled();   // task is the truth
     const AppSettings* s = &g_appState.settings;
 
     static const wchar_t* kSizeNames[] = {L"Tiny (16 px)", L"Small (32 px)", L"Medium (64 px)", L"Large (96 px)"};

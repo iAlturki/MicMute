@@ -19,15 +19,6 @@ void SyncMuteUI(void)
     SaveSettings();
 }
 
-static void EnableDpiAwareness(void)
-{
-    // Per-monitor v2 when available (Win10 1703+), else system DPI aware.
-    typedef BOOL (WINAPI *SetCtxFn)(HANDLE);
-    SetCtxFn set = (SetCtxFn)(void*)GetProcAddress(GetModuleHandleW(L"user32"), "SetProcessDpiAwarenessContext");
-    if (!set || !set((HANDLE)-4 /*DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2*/))
-        SetProcessDPIAware();
-}
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     g_msgActivate = RegisterWindowMessageW(L"iAlturki-MicMute-Activate");
@@ -40,7 +31,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
-    EnableDpiAwareness();
+    // DPI awareness (PerMonitorV2) is declared in the embedded manifest.
     CoInitialize(NULL);
     Render_Init();
     LoadSettings();

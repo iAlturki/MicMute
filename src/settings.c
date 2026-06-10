@@ -8,6 +8,8 @@
 
 typedef struct { const wchar_t* name; void* ptr; DWORD type; DWORD size; } RegEntry;
 
+static void RemoveLegacyRunEntry(void);
+
 #define S g_appState.settings
 static const RegEntry kRegMap[] = {
     {L"OverlaySize",           &S.overlaySize,            REG_DWORD,  sizeof(DWORD)},
@@ -71,7 +73,10 @@ void LoadSettings(void)
         RegCloseKey(key);
     }
     Validate();
-    S.startupEnabled = IsStartupEnabled();   // the Run key is the truth
+    // v1 used the Run key, which silently refuses elevated exes - drop it.
+    // startupEnabled keeps its persisted value here (no schtasks spawn on
+    // the startup path); the tray menu re-queries the task when opened.
+    RemoveLegacyRunEntry();
 }
 
 void SaveSettings(void)
@@ -84,32 +89,55 @@ void SaveSettings(void)
     RegCloseKey(key);
 }
 
-BOOL IsStartupEnabled(void)
+// The exe requires elevation, and the Run key silently refuses to launch
+// elevated programs at logon - so autostart uses a Task Scheduler task with
+// highest privileges instead. The legacy v1 Run entry is cleaned up.
+static DWORD RunHidden(wchar_t* cmd)
+{
+    STARTUPINFOW si = {sizeof(si)};
+    PROCESS_INFORMATION pi;
+    DWORD code = (DWORD)-1;
+    if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        WaitForSingleObject(pi.hProcess, 5000);
+        GetExitCodeProcess(pi.hProcess, &code);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+    return code;
+}
+
+static void RemoveLegacyRunEntry(void)
 {
     HKEY key;
-    BOOL enabled = FALSE;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_READ, &key) == ERROR_SUCCESS) {
-        enabled = RegQueryValueExW(key, APP_NAME, NULL, NULL, NULL, NULL) == ERROR_SUCCESS;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_WRITE, &key) == ERROR_SUCCESS) {
+        RegDeleteValueW(key, APP_NAME);
         RegCloseKey(key);
     }
-    return enabled;
+}
+
+BOOL IsStartupEnabled(void)
+{
+    wchar_t cmd[128];
+    wcscpy_s(cmd, ARRAYSIZE(cmd), L"schtasks /Query /TN \"" APP_NAME L"\"");
+    return RunHidden(cmd) == 0;
 }
 
 void EnableStartup(BOOL enable)
 {
-    HKEY key;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_WRITE, &key) == ERROR_SUCCESS) {
-        if (enable) {
-            wchar_t cmd[MAX_PATH + 2] = L"\"";
-            GetModuleFileNameW(NULL, cmd + 1, MAX_PATH);
-            wcscat_s(cmd, ARRAYSIZE(cmd), L"\"");
-            RegSetValueExW(key, APP_NAME, 0, REG_SZ, (const BYTE*)cmd,
-                           (DWORD)((wcslen(cmd) + 1) * sizeof(wchar_t)));
-        } else {
-            RegDeleteValueW(key, APP_NAME);
-        }
-        RegCloseKey(key);
+    wchar_t cmd[MAX_PATH * 2];
+    if (enable) {
+        wchar_t exe[MAX_PATH];
+        GetModuleFileNameW(NULL, exe, MAX_PATH);
+        wsprintfW(cmd, L"schtasks /Create /F /RL HIGHEST /SC ONLOGON /TN \"%s\" /TR \"\\\"%s\\\"\"",
+                  APP_NAME, exe);
+    } else {
+        wsprintfW(cmd, L"schtasks /Delete /F /TN \"%s\"", APP_NAME);
     }
+    if (RunHidden(cmd) != 0 && enable) {
+        TrayBalloon(APP_NAME, L"Could not create the startup task.");
+        return;
+    }
+    RemoveLegacyRunEntry();
     S.startupEnabled = enable;
     SaveSettings();
 }

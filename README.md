@@ -43,6 +43,9 @@ The default hotkey is **F8**. To change it, right-click the tray icon and pick a
 - Windows 10/11
 - Single small executable, no dependencies
 - Minimal CPU/RAM usage
+- Runs elevated (one UAC prompt at launch) so the hotkey keeps working while
+  admin apps or fullscreen games have focus; "Start with Windows" uses a
+  Task Scheduler task with highest privileges
 
 ## Build from Source
 
@@ -51,7 +54,7 @@ Requires Visual Studio 2022. From a **VS2022 Developer Command Prompt** in the r
 ```bat
 mkdir build
 rc /fo build\resources.res src\resources.rc
-cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS
+cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS /MANIFEST:NO
 ```
 
 The result is a single `build\iAlturki-MicMute.exe`. Releases are also built automatically by GitHub Actions.
