@@ -11,7 +11,7 @@
 #include <math.h>
 
 #define APP_NAME        L"iAlturki-MicMute"
-#define APP_VERSION     L"2.0.0"
+#define APP_VERSION     L"2.0.1"
 #define APP_URL         L"https://github.com/iAlturki/MicMute"
 
 // Window messages
