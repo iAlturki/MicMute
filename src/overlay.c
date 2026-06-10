@@ -1,13 +1,16 @@
 // overlay.c - on-screen mute badge. One layered window per monitor (true
 // per-pixel alpha via UpdateLayeredWindow), per-monitor DPI scaling, and a
-// small animation engine: fade/slide in on mute, settle to 70% opacity after
-// a few seconds muted, green confirmation flash that fades away on unmute.
-// The timer interval always matches the phase, so nothing busy-ticks.
+// small animation engine. Muted timeline: fade/slide in -> badge plate holds
+// 3s then melts away leaving the bare glyph -> settles to 70% opacity at the
+// 6s mark. Unmute: green confirmation flash that fades away. The timer
+// interval always matches the phase, so nothing busy-ticks.
 #include "micmute.h"
 #include <shellscalingapi.h>
 
 #define MAX_MON 16
-#define DIM_AFTER_MS 6000   // muted this long -> badge settles back
+#define BG_HOLD_MS   3000   // muted this long -> background melts away
+#define BG_MELT_MS   600
+#define DIM_WAIT_MS  2400   // melt end -> 6s total, then settle to 70%
 #define DIM_FADE_MS  400
 #define DIM_ALPHA    179    // 70% of 255
 
@@ -26,7 +29,7 @@ typedef struct {
 static Overlay g_ov[MAX_MON];
 static int  g_ovCount;
 static UINT_PTR g_timer;
-static enum { AN_NONE, AN_FADE_IN, AN_WAIT_DIM, AN_DIM, AN_HOLD, AN_FADE_OUT } g_phase;
+static enum { AN_NONE, AN_FADE_IN, AN_WAIT_BG, AN_BG_OUT, AN_WAIT_DIM, AN_DIM, AN_HOLD, AN_FADE_OUT } g_phase;
 static DWORD g_t0;
 static BOOL g_visible, g_isFlash;
 
@@ -114,14 +117,21 @@ static void EnsureWindow(Overlay* o)
             NULL, NULL, GetModuleHandleW(NULL), NULL);
 }
 
-static void SetBitmap(Overlay* o, BOOL muted)
+static void SetBitmap(Overlay* o, BOOL muted, float bg)
 {
-    HBITMAP dib = RenderBadge(o->winPx, o->badgePx, muted);
+    HBITMAP dib = RenderBadge(o->winPx, o->badgePx, muted, bg);
     if (!dib) return;
     if (!o->memDC) o->memDC = CreateCompatibleDC(NULL);
     SelectObject(o->memDC, dib);
     if (o->dib) DeleteObject(o->dib);
     o->dib = dib;
+}
+
+static void SetBitmapAll(BOOL muted, float bg)
+{
+    for (int i = 0; i < g_ovCount; i++)
+        if (Active(&g_ov[i]) && g_ov[i].hwnd)
+            SetBitmap(&g_ov[i], muted, bg);
 }
 
 static void Present(Overlay* o, BYTE alpha, int yOff)
@@ -179,10 +189,25 @@ static void CALLBACK AnimTick(HWND hwnd, UINT msg, UINT_PTR id, DWORD now)
     switch (g_phase) {
         case AN_FADE_IN:
             t = (now - g_t0) / 180.0f;
-            if (t >= 1.0f) { PresentAll(255, 0); StartAnim(AN_WAIT_DIM, DIM_AFTER_MS); }
+            if (t >= 1.0f) { PresentAll(255, 0); StartAnim(AN_WAIT_BG, BG_HOLD_MS); }
             else {
                 float e = 1 - (1 - t) * (1 - t) * (1 - t);   // ease-out cubic
                 PresentAll((BYTE)(255 * e), 1.0f - e);
+            }
+            break;
+        case AN_WAIT_BG:         // single long tick, then melt the plate away
+            StartAnim(AN_BG_OUT, 25);
+            break;
+        case AN_BG_OUT:          // re-render per frame with shrinking bg alpha
+            t = (now - g_t0) / (float)BG_MELT_MS;
+            if (t >= 1.0f) {
+                SetBitmapAll(TRUE, 0);
+                PresentAll(255, 0);
+                StartAnim(AN_WAIT_DIM, DIM_WAIT_MS);
+            } else {
+                float e = t * t * (3 - 2 * t);               // smoothstep
+                SetBitmapAll(TRUE, 1.0f - e);
+                PresentAll(255, 0);
             }
             break;
         case AN_WAIT_DIM:        // single long tick, then ease down to 70%
@@ -221,12 +246,12 @@ void OverlayShowMuted(BOOL animate)
         if (!Active(o)) { if (o->shown) { ShowWindow(o->hwnd, SW_HIDE); o->shown = FALSE; } continue; }
         Layout(o);
         EnsureWindow(o);
-        SetBitmap(o, TRUE);
+        SetBitmap(o, TRUE, 1.0f);
     }
     g_visible = TRUE;
     g_isFlash = FALSE;
     if (animate) { PresentAll(0, 1.0f); StartAnim(AN_FADE_IN, 15); }
-    else         { PresentAll(255, 0);  StartAnim(AN_WAIT_DIM, DIM_AFTER_MS); }
+    else         { PresentAll(255, 0);  StartAnim(AN_WAIT_BG, BG_HOLD_MS); }
 }
 
 // Called on unmute: morph the visible badge into a green "live" flash that
@@ -235,9 +260,7 @@ void OverlayHide(void)
 {
     if (!g_visible || g_isFlash) return;
     StopAnim();
-    for (int i = 0; i < g_ovCount; i++)
-        if (Active(&g_ov[i]) && g_ov[i].hwnd)
-            SetBitmap(&g_ov[i], FALSE);
+    SetBitmapAll(FALSE, 1.0f);
     g_isFlash = TRUE;
     PresentAll(255, 0);
     StartAnim(AN_HOLD, 320);

@@ -81,7 +81,7 @@ void SyncMuteUI(void);                 // tray + overlay + duck after isMuted ch
 // render.c (GDI+ drawing, per-pixel alpha)
 BOOL  Render_Init(void);
 void  Render_Shutdown(void);
-HBITMAP RenderBadge(int windowPx, int badgePx, BOOL muted);   // PARGB DIB for overlay
+HBITMAP RenderBadge(int windowPx, int badgePx, BOOL muted, float bg);  // PARGB DIB; bg 1..0 melts the plate
 HICON RenderTrayIcon(int px, BOOL muted, BOOL lightTaskbar);
 
 // overlay.c

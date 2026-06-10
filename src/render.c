@@ -51,6 +51,12 @@ int  WINAPI GdipDrawArc(void* graphics, void* pen, float x, float y, float w, fl
 
 static ULONG_PTR g_gdipToken;
 
+// Scale a color's alpha channel (for the background melt-away animation).
+static DWORD ScaleA(DWORD argb, float f)
+{
+    return ((DWORD)((BYTE)((argb >> 24) * f)) << 24) | (argb & 0xFFFFFF);
+}
+
 BOOL Render_Init(void)
 {
     GpStartupInput in = {1, NULL, FALSE, FALSE};
@@ -148,11 +154,11 @@ static void DrawSlash(void* g, float gx, float gy, float u, DWORD notchColor, DW
 }
 
 // Soft drop shadow: stacked translucent rounded rects, slightly sunk.
-static void DrawShadow(void* g, float x, float y, float w, float h, float r, float spread)
+static void DrawShadow(void* g, float x, float y, float w, float h, float r, float spread, float opacity)
 {
     for (int j = 0; j < 6; j++) {
         float grow = spread * (6 - j) / 6.0f;
-        DWORD a = (DWORD)(5 + j * 6);
+        DWORD a = (DWORD)((5 + j * 6) * opacity);
         FillRoundRect(g, a << 24, x - grow, y - grow + spread * 0.35f,
                       w + 2 * grow, h + 2 * grow, r + grow);
     }
@@ -160,12 +166,17 @@ static void DrawShadow(void* g, float x, float y, float w, float h, float r, flo
 
 // On-screen overlay badge. windowPx is the full DIB (badge + shadow margin),
 // badgePx the badge itself. muted=TRUE: white mic, red slash. FALSE: green
-// "live" mic used for the unmute confirmation flash.
-HBITMAP RenderBadge(int windowPx, int badgePx, BOOL muted)
+// "live" mic used for the unmute confirmation flash. bg scales the badge
+// background (shadow/plate/highlight/border/glow) from 1 (full) to 0 (gone),
+// driving the melt-away a few seconds after muting; the glyph always stays.
+HBITMAP RenderBadge(int windowPx, int badgePx, BOOL muted, float bg)
 {
     void* bits = NULL;
     HBITMAP dib = CreatePargbDib(windowPx, windowPx, &bits);
     if (!dib) return NULL;
+
+    if (bg < 0) bg = 0;
+    if (bg > 1) bg = 1;
 
     void* bmp = NULL;
     void* g = BeginDraw(windowPx, windowPx, bits, &bmp);
@@ -174,37 +185,41 @@ HBITMAP RenderBadge(int windowPx, int badgePx, BOOL muted)
         float s = (float)badgePx;
         float r = s * 0.24f;
 
-        DrawShadow(g, m, m, s, s, r, m * 0.8f);
-        FillRoundRect(g, COL_BADGE_BG, m, m, s, s, r);
+        if (bg > 0) {
+            DrawShadow(g, m, m, s, s, r, m * 0.8f, bg);
+            FillRoundRect(g, ScaleA(COL_BADGE_BG, bg), m, m, s, s, r);
 
-        // glassy top highlight
-        GpPointF p1 = {m, m}, p2 = {m, m + s * 0.6f};
-        void* grad = NULL;
-        GdipCreateLineBrush(&p1, &p2, 0x17FFFFFFU, 0x00FFFFFFU, WrapTileFlipXY, &grad);
-        if (grad) {
-            void* clip = RoundRectPath(m + 1, m + 1, s - 2, s * 0.6f - 1, r - 1);
-            GdipFillPath(g, grad, clip);
-            GdipDeletePath(clip);
-            GdipDeleteBrush(grad);
+            // glassy top highlight
+            GpPointF p1 = {m, m}, p2 = {m, m + s * 0.6f};
+            void* grad = NULL;
+            GdipCreateLineBrush(&p1, &p2, ScaleA(0x17FFFFFFU, bg), 0x00FFFFFFU, WrapTileFlipXY, &grad);
+            if (grad) {
+                void* clip = RoundRectPath(m + 1, m + 1, s - 2, s * 0.6f - 1, r - 1);
+                GdipFillPath(g, grad, clip);
+                GdipDeletePath(clip);
+                GdipDeleteBrush(grad);
+            }
+
+            // hairline border
+            void* border = RoundRectPath(m + 0.5f, m + 0.5f, s - 1, s - 1, r);
+            void* pen = MakeRoundPen(ScaleA(COL_BORDER, bg), max(1.0f, s * 0.02f));
+            GdipDrawPath(g, pen, border);
+            GdipDeletePen(pen);
+            GdipDeletePath(border);
         }
-
-        // hairline border
-        void* border = RoundRectPath(m + 0.5f, m + 0.5f, s - 1, s - 1, r);
-        void* pen = MakeRoundPen(COL_BORDER, max(1.0f, s * 0.02f));
-        GdipDrawPath(g, pen, border);
-        GdipDeletePen(pen);
-        GdipDeletePath(border);
 
         // soft state-colored glow behind the glyph
         float u = s * 0.60f;
         float gx = m + (s - u) / 2, gy = m + (s - u) / 2;
         void* glow = NULL;
-        GdipCreateSolidFill(muted ? 0x2090202AU /*red tint*/ : 0x203DD68CU, &glow);
+        GdipCreateSolidFill(ScaleA(muted ? 0x2090202AU /*red tint*/ : 0x203DD68CU, bg), &glow);
         GdipFillEllipse(g, glow, gx - 0.10f * u, gy - 0.10f * u, 1.2f * u, 1.2f * u);
         GdipDeleteBrush(glow);
 
+        // soft dark under-shadow keeps the glyph readable once the badge is gone
+        DrawMic(g, gx + 0.05f * u, gy + 0.05f * u, u, 0x59101218U);
         DrawMic(g, gx, gy, u, muted ? COL_MIC_WHITE : COL_GREEN);
-        if (muted) DrawSlash(g, gx, gy, u, COL_BADGE_BG, COL_RED);
+        if (muted) DrawSlash(g, gx, gy, u, ScaleA(COL_BADGE_BG, bg), COL_RED);
     }
     EndDraw(g, bmp);
     return dib;
