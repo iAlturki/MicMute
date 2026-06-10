@@ -4,6 +4,19 @@
 
 [![Download Latest Release](https://img.shields.io/github/v/release/iAlturki/MicMute?label=Download&style=for-the-badge&color=brightgreen)](https://github.com/iAlturki/MicMute/releases/latest/download/iAlturki-MicMute.exe)
 
+<img src="assets/overlay-demo.gif" width="224" alt="Mute, background melt, and unmute flash demo">
+
+| Muted | After 3 s | Unmute flash |
+|:-:|:-:|:-:|
+| <img src="assets/overlay-muted.png" width="112"> | <img src="assets/overlay-melted.png" width="112"> | <img src="assets/overlay-live.png" width="112"> |
+
+## What's new in 2.0
+
+- Redesigned overlay: rounded badge, soft shadow, smooth animations, background melt + auto-dim
+- Tray icons drawn at runtime — red badge when muted, theme-aware glyph with green dot when live
+- Instant sync with mute changes from other apps (no polling) and mic hot-swap support
+- Working custom hotkeys, synthesized audio cues, per-monitor DPI awareness
+
 ## Features
 
 - **Visual overlay** – Per-pixel-alpha layered window rendered with GDI+: a rounded dark badge with a soft drop shadow and an antialiased mic glyph (red slash when muted). Fades and slides in on mute; after 3 seconds the badge background melts away leaving just the floating glyph, which settles to 70% opacity at the 6-second mark so it stays out of your way. Flashes a green "live" indicator that fades out on unmute. 9 screen positions, 4 sizes (16/32/64/96 px), per-monitor DPI-aware, with full multi-monitor and monitor hot-plug support.
