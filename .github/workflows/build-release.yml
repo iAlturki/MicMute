@@ -1,4 +1,4 @@
-﻿name: Build and Release
+name: Build and Release
 
 on:
   push:
@@ -13,61 +13,61 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Visual Studio environment
       uses: microsoft/setup-msbuild@v2
-      
+
     - name: Build single executable
       run: |
         # Create build directory
         if (!(Test-Path "build")) { New-Item -ItemType Directory -Path "build" }
-        
+
         # Setup Visual Studio environment and build with embedded resources
         cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS'
-        
-        # Clean up build artifacts  
+
+        # Clean up build artifacts
         Remove-Item -Path "*.obj" -ErrorAction SilentlyContinue
         Remove-Item -Path "build\*.res" -ErrorAction SilentlyContinue
-      
+
     - name: Verify build
       run: |
         if (Test-Path "build\iAlturki-MicMute.exe") {
-          Write-Host "âœ… Single executable built successfully"
+          Write-Host "OK: single executable built successfully"
           $file = Get-Item "build\iAlturki-MicMute.exe"
-          Write-Host "ðŸ“¦ Size: $($file.Length) bytes"
-          Write-Host "ðŸ“… Built: $($file.LastWriteTime)"
+          Write-Host "Size: $($file.Length) bytes"
+          Write-Host "Built: $($file.LastWriteTime)"
         } else {
-          Write-Host "âŒ Executable not found"
+          Write-Host "ERROR: executable not found"
           exit 1
         }
-        
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         files: build/iAlturki-MicMute.exe
         name: iAlturki-MicMute ${{ github.ref_name }}
         body: |
-          ## ðŸŽ™ï¸ iAlturki-MicMute ${{ github.ref_name }}
-          
-          Simple microphone mute utility for Windows.
-          
+          ## iAlturki-MicMute ${{ github.ref_name }}
+
+          Microphone mute utility for Windows.
+
           **Installation:**
           1. Download `iAlturki-MicMute.exe`
           2. Run it
           3. Press **F8** to mute/unmute
-          
+
           **Key Features:**
           - Animated, DPI-aware on-screen mute overlay
           - Runtime-rendered tray icons (theme-aware, no static bitmaps)
           - Reacts instantly when other apps change your mute state
           - Survives default-microphone hot-swap
-          - Custom hotkeys (F1â€“F12, Ctrl+M, or any combination; F8 default)
+          - Custom hotkeys (F1-F12, Ctrl+M, or any combination; F8 default)
           - Works on Windows 10/11
-          
+
           Single file, no setup required.
         draft: false
         prerelease: false
