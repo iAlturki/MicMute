@@ -18,16 +18,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Visual Studio environment
-      uses: microsoft/setup-msbuild@v2
-
     - name: Build single executable
       run: |
         # Create build directory
         if (!(Test-Path "build")) { New-Item -ItemType Directory -Path "build" }
 
-        # Setup Visual Studio environment and build with embedded resources
-        cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" && rc /fo build\resources.res src\resources.rc && cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS /MANIFEST:NO'
+        # Locate Visual Studio (any version/edition) and build with embedded resources
+        $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if (-not $vs) { Write-Host "Visual Studio with C++ tools not found"; exit 1 }
+        $bat = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+        cmd /c " ""$bat"" && rc /fo build\resources.res src\resources.rc && cl /O2 /W3 /Fe:build\iAlturki-MicMute.exe src\*.c build\resources.res user32.lib shell32.lib ole32.lib winmm.lib gdi32.lib advapi32.lib gdiplus.lib shcore.lib /link /SUBSYSTEM:WINDOWS /MANIFEST:NO "
+        if ($LASTEXITCODE -ne 0) { exit 1 }
 
         # Clean up build artifacts
         Remove-Item -Path "*.obj" -ErrorAction SilentlyContinue
