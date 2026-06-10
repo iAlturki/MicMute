@@ -1,121 +1,249 @@
 #include "micmute.h"
 
 AppState g_appState = {0};
-HANDLE g_hMutex = NULL;
+const DWORD kOverlaySizes[4] = {16, 32, 64, 96};
+
+static HANDLE g_hMutex = NULL;
+static UINT g_msgActivate;   // broadcast by a second instance
+
+static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+// Re-sync everything that reflects mute state.
+void SyncMuteUI(void)
+{
+    TrayUpdate();
+    if (g_appState.isMuted) OverlayShowMuted(TRUE);
+    else                    OverlayHide();
+    DuckSystemVolume(g_appState.isMuted);
+    g_appState.settings.lastMuteState = g_appState.isMuted;
+    SaveSettings();
+}
+
+static void EnableDpiAwareness(void)
+{
+    // Per-monitor v2 when available (Win10 1703+), else system DPI aware.
+    typedef BOOL (WINAPI *SetCtxFn)(HANDLE);
+    SetCtxFn set = (SetCtxFn)(void*)GetProcAddress(GetModuleHandleW(L"user32"), "SetProcessDpiAwarenessContext");
+    if (!set || !set((HANDLE)-4 /*DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2*/))
+        SetProcessDPIAware();
+}
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-    // Check for single instance
+    g_msgActivate = RegisterWindowMessageW(L"iAlturki-MicMute-Activate");
+
     g_hMutex = CreateMutexW(NULL, TRUE, L"iAlturki-MicMute-SingleInstance");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBoxW(NULL, L"iAlturki-MicMute is already running!", L"Already Running", MB_OK | MB_ICONINFORMATION);
-        if (g_hMutex) {
-            CloseHandle(g_hMutex);
-        }
+        // Tell the running instance to announce itself instead of erroring out.
+        PostMessageW(HWND_BROADCAST, g_msgActivate, 0, 0);
+        if (g_hMutex) CloseHandle(g_hMutex);
         return 0;
     }
-    
-    // Initialize COM
+
+    EnableDpiAwareness();
     CoInitialize(NULL);
-    
-    // Initialize settings with defaults
-    InitializeDefaultSettings();
+    Render_Init();
     LoadSettings();
-    
-    // Initialize multi-monitor overlay system
-    InitializeMultiMonitorOverlay();
-    
-    // Create main window
-    if (!CreateMainWindow(hInstance)) {
-        MessageBoxW(NULL, L"Failed to create window", L"Error", MB_OK | MB_ICONERROR);
-        if (g_hMutex) {
-            ReleaseMutex(g_hMutex);
-            CloseHandle(g_hMutex);
-        }
+
+    WNDCLASSW wc = {0};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = L"MicMuteWindow";
+    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(1));
+    RegisterClassW(&wc);
+
+    g_appState.hWnd = CreateWindowW(L"MicMuteWindow", APP_NAME, WS_OVERLAPPED,
+                                    0, 0, 0, 0, NULL, NULL, hInstance, NULL);
+    if (!g_appState.hWnd) {
+        MessageBoxW(NULL, L"Failed to create window.", APP_NAME, MB_OK | MB_ICONERROR);
         return 1;
     }
-    
-    // Load the muted icon from file
-    LoadIconFromFile();
-    
-    // Initialize audio
-    if (!InitializeAudio()) {
-        MessageBoxW(NULL, L"Failed to initialize audio", L"Error", MB_OK | MB_ICONERROR);
-        if (g_hMutex) {
-            ReleaseMutex(g_hMutex);
-            CloseHandle(g_hMutex);
-        }
+
+    if (!AudioInit()) {
+        MessageBoxW(NULL, L"Audio system unavailable (COM initialization failed).", APP_NAME, MB_OK | MB_ICONERROR);
         return 1;
     }
-    
-    // Check actual microphone state and sync with saved state
-    BOOL actualMuteState;
-    if (g_appState.pEndpointVolume && 
-        SUCCEEDED(g_appState.pEndpointVolume->lpVtbl->GetMute(g_appState.pEndpointVolume, &actualMuteState))) {
-        g_appState.isMuted = actualMuteState;
-        
-        // Show overlay immediately if currently muted
-        if (actualMuteState) {
-            ShowOverlay(TRUE);
-        }
-        
-        // Update tray icon to reflect current state
-        UpdateTrayIcon(actualMuteState);
-        
-        // Save the actual state
-        g_appState.settings.lastMuteState = actualMuteState;
-    } else {
-        // Fallback: restore last saved state if we can't read current state
-        if (g_appState.settings.lastMuteState != g_appState.isMuted) {
-            ToggleMicrophone();
-        }
-    }
-    
-    // Initialize system tray
-    if (!InitializeSystemTray(g_appState.hWnd, hInstance)) {
-        MessageBoxW(NULL, L"Failed to initialize system tray", L"Error", MB_OK | MB_ICONERROR);
-        if (g_hMutex) {
-            ReleaseMutex(g_hMutex);
-            CloseHandle(g_hMutex);
-        }
+
+    // Adopt the device's real state so the UI never lies about a hot mic.
+    BOOL actual;
+    if (AudioGetMute(&actual)) g_appState.isMuted = actual;
+    else                       g_appState.isMuted = g_appState.settings.lastMuteState;
+    RestoreLockedVolume();   // enforce a persisted volume lock against drift while closed
+
+    if (!TrayInit(g_appState.hWnd)) {
+        MessageBoxW(NULL, L"Failed to create tray icon.", APP_NAME, MB_OK | MB_ICONERROR);
         return 1;
     }
-    
-    // Hotkey will be registered automatically by WM_CREATE timer
-    
-    // Start volume monitoring timer if volume lock is enabled
-    if (g_appState.settings.volumeLockEnabled) {
-        SetTimer(g_appState.hWnd, VOLUME_MONITOR_TIMER_ID, g_appState.settings.volumeCheckInterval, NULL);
-    }
-    
-    // Message loop
+    SyncMuteUI();
+    RegisterCurrentHotkey();
+
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-    
-    // Cleanup
+
     UnregisterCurrentHotkey();
-    CleanupSystemTray();
-    CleanupAudio();
-    CleanupMultiMonitorOverlay();
-    
-    // Save current state before exit
+    TrayCleanup();
+    DuckSystemVolume(FALSE);
+    AudioCleanup();
+    OverlayCleanup();
     g_appState.settings.lastMuteState = g_appState.isMuted;
     SaveSettings();
-    
-    if (g_appState.hMutedIcon) {
-        DestroyIcon(g_appState.hMutedIcon);
-    }
-    
-    // Release single instance mutex
-    if (g_hMutex) {
-        ReleaseMutex(g_hMutex);
-        CloseHandle(g_hMutex);
-    }
-    
+    Render_Shutdown();
     CoUninitialize();
-    
+    if (g_hMutex) { ReleaseMutex(g_hMutex); CloseHandle(g_hMutex); }
     return 0;
+}
+
+static void OnCommand(HWND hwnd, UINT id)
+{
+    if (id >= ID_MENU_POS_FIRST && id <= ID_MENU_POS_LAST) {
+        g_appState.settings.overlayPosition = (OverlayPosition)(id - ID_MENU_POS_FIRST);
+        SaveSettings();
+        OverlayRebuild();
+        return;
+    }
+    if (id >= ID_MENU_SIZE_FIRST && id <= ID_MENU_SIZE_LAST) {
+        g_appState.settings.overlaySize = kOverlaySizes[id - ID_MENU_SIZE_FIRST];
+        SaveSettings();
+        OverlayRebuild();
+        return;
+    }
+    if (id >= ID_MENU_HOTKEY_F1 && id <= ID_MENU_HOTKEY_F12) {
+        ChangeHotkey(VK_F1 + (id - ID_MENU_HOTKEY_F1));
+        return;
+    }
+
+    switch (id) {
+        case ID_MENU_TOGGLE:        ToggleMicrophone(); break;
+        case ID_MENU_HOTKEY_CTRL_M: ChangeHotkey(HOTKEY_CTRL_M); break;
+        case ID_MENU_HOTKEY_CUSTOM: BeginHotkeyCapture(); break;
+
+        case ID_MENU_MULTIMONITOR:
+            g_appState.settings.multiMonitorMode = !g_appState.settings.multiMonitorMode;
+            SaveSettings();
+            OverlayRebuild();
+            break;
+
+        case ID_MENU_SOUND_FEEDBACK:
+            g_appState.settings.audioFeedbackEnabled = !g_appState.settings.audioFeedbackEnabled;
+            SaveSettings();
+            break;
+
+        case ID_MENU_DUCK_VOLUME:
+            g_appState.settings.reduceVolumeWhenMuted = !g_appState.settings.reduceVolumeWhenMuted;
+            DuckSystemVolume(g_appState.isMuted);
+            SaveSettings();
+            break;
+
+        case ID_MENU_VOLUME_LOCK:
+            if (g_appState.settings.volumeLockEnabled) {
+                g_appState.settings.volumeLockEnabled = FALSE;
+                SaveSettings();
+            } else {
+                LockCurrentVolume();
+            }
+            break;
+
+        case ID_MENU_STARTUP:
+            EnableStartup(!g_appState.settings.startupEnabled);
+            break;
+
+        case ID_MENU_ABOUT: {
+            wchar_t text[256];
+            wsprintfW(text, L"%s v%s\n\nMicrophone mute utility for Windows.\n\nVisit GitHub page?",
+                      APP_NAME, APP_VERSION);
+            if (MessageBoxW(hwnd, text, L"About", MB_YESNO | MB_ICONINFORMATION) == IDYES)
+                ShellExecuteW(NULL, L"open", APP_URL, NULL, NULL, SW_SHOWNORMAL);
+            break;
+        }
+
+        case ID_MENU_EXIT:
+            DestroyWindow(hwnd);
+            break;
+    }
+}
+
+static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    if (uMsg == g_msgActivate && g_msgActivate) {
+        wchar_t hk[64], text[128];
+        FormatHotkeyName(hk, 64, g_appState.settings.currentHotkey,
+                         g_appState.settings.customHotkeyModifiers, g_appState.settings.customHotkeyVK);
+        wsprintfW(text, L"Already running. Press %s to toggle the microphone.", hk);
+        TrayBalloon(APP_NAME, text);
+        return 0;
+    }
+    if (uMsg == TrayTaskbarCreatedMsg()) {
+        TrayInit(hwnd);   // Explorer restarted: re-add the icon
+        TrayUpdate();
+        return 0;
+    }
+
+    switch (uMsg) {
+        case WM_HOTKEY:
+            if (wParam == HOTKEY_ID) ToggleMicrophone();
+            return 0;
+
+        case WM_APP_TRAY:
+            switch (LOWORD(lParam)) {
+                case WM_LBUTTONDBLCLK: ToggleMicrophone(); break;
+                case WM_RBUTTONUP: {
+                    POINT pt;
+                    GetCursorPos(&pt);
+                    TrayShowMenu(hwnd, pt);
+                    break;
+                }
+            }
+            return 0;
+
+        case WM_APP_AUDIO: {   // change made outside the app (Teams, mic key, Settings...)
+            BOOL muted = (BOOL)wParam;
+            AudioGetMute(&muted);   // snapshot may be stale if we toggled meanwhile
+            float vol = (float)lParam / 10000.0f;
+            if (muted != g_appState.isMuted) {
+                g_appState.isMuted = muted;
+                SyncMuteUI();
+            }
+            if (g_appState.settings.volumeLockEnabled &&
+                fabsf(vol - g_appState.settings.lockedVolume) > 0.004f)
+                RestoreLockedVolume();
+            return 0;
+        }
+
+        case WM_APP_DEVICE:
+            if (wParam) AudioReinitSystemEndpoint();   // default output changed
+            else        AudioReinitDevice();           // default mic changed
+            return 0;
+
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+            OverlayRebuild();
+            return 0;
+
+        case WM_SETTINGCHANGE:
+            if (wParam == SPI_SETWORKAREA)             // taskbar moved/resized
+                OverlayRebuild();
+            else if (lParam && wcscmp((const wchar_t*)lParam, L"ImmersiveColorSet") == 0)
+                TrayRefreshTheme();
+            return 0;
+
+        case WM_ENDSESSION:
+            if (wParam) {   // process may be killed any moment: undo the duck now
+                DuckSystemVolume(FALSE);
+                g_appState.settings.lastMuteState = g_appState.isMuted;
+                SaveSettings();
+            }
+            return 0;
+
+        case WM_COMMAND:
+            OnCommand(hwnd, LOWORD(wParam));
+            return 0;
+
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            return 0;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }

@@ -1,210 +1,168 @@
+// tray.c - notification icon and menu. Icons are rendered at runtime (red
+// badge when muted, theme-aware glyph with green dot when live), the icon
+// survives Explorer restarts via TaskbarCreated, and menus are built from
+// tables instead of repeated AppendMenu blocks.
 #include "micmute.h"
 
-BOOL InitializeSystemTray(HWND hwnd, HINSTANCE hInstance)
+static NOTIFYICONDATAW g_nid;
+static HICON g_iconMuted, g_iconLive;
+static UINT  g_taskbarCreated;
+
+UINT TrayTaskbarCreatedMsg(void)
 {
-    NOTIFYICONDATAW nid = {0};
-    nid.cbSize = sizeof(NOTIFYICONDATAW);
-    nid.hWnd = hwnd;
-    nid.uID = 1;
-    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-    nid.uCallbackMessage = WM_TRAYICON;
-    nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
-    wcscpy_s(nid.szTip, sizeof(nid.szTip)/sizeof(wchar_t), L"iAlturki-MicMute Enhanced");
-    
-    return Shell_NotifyIconW(NIM_ADD, &nid);
+    return g_taskbarCreated;
 }
 
-void UpdateTrayIcon(BOOL isMuted) 
+static BOOL IsLightTaskbar(void)
 {
-    NOTIFYICONDATAW nid = {0};
-    nid.cbSize = sizeof(NOTIFYICONDATAW);
-    nid.hWnd = g_appState.hWnd;
-    nid.uID = 1;
-    nid.uFlags = NIF_ICON | NIF_TIP;
-    
-    if (isMuted) {
-        nid.hIcon = LoadIcon(NULL, IDI_ERROR);
-        if (g_appState.settings.volumeLockEnabled) {
-            wcscpy_s(nid.szTip, sizeof(nid.szTip)/sizeof(wchar_t), L"iAlturki-MicMute - MUTED - Volume Locked");
-        } else {
-            wcscpy_s(nid.szTip, sizeof(nid.szTip)/sizeof(wchar_t), L"iAlturki-MicMute - MUTED");
-        }
-    } else {
-        nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
-        if (g_appState.settings.volumeLockEnabled) {
-            wcscpy_s(nid.szTip, sizeof(nid.szTip)/sizeof(wchar_t), L"iAlturki-MicMute - ACTIVE - Volume Locked");
-        } else {
-            wcscpy_s(nid.szTip, sizeof(nid.szTip)/sizeof(wchar_t), L"iAlturki-MicMute - ACTIVE");
-        }
+    DWORD v = 0, size = sizeof(v);
+    return RegGetValueW(HKEY_CURRENT_USER,
+                        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, NULL, &v, &size) == ERROR_SUCCESS
+           && v != 0;
+}
+
+static void BuildIcons(void)
+{
+    int px = max(16, GetSystemMetrics(SM_CXSMICON));
+    BOOL light = IsLightTaskbar();
+    if (g_iconMuted) DestroyIcon(g_iconMuted);
+    if (g_iconLive)  DestroyIcon(g_iconLive);
+    g_iconMuted = RenderTrayIcon(px, TRUE, light);
+    g_iconLive  = RenderTrayIcon(px, FALSE, light);
+}
+
+BOOL TrayInit(HWND hwnd)
+{
+    if (!g_taskbarCreated)
+        g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    if (!g_iconMuted) BuildIcons();
+
+    ZeroMemory(&g_nid, sizeof(g_nid));
+    g_nid.cbSize = sizeof(g_nid);
+    g_nid.hWnd = hwnd;
+    g_nid.uID = 1;
+    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    g_nid.uCallbackMessage = WM_APP_TRAY;
+    g_nid.hIcon = g_appState.isMuted ? g_iconMuted : g_iconLive;
+    wcscpy_s(g_nid.szTip, ARRAYSIZE(g_nid.szTip), APP_NAME);
+
+    // At logon the shell can be busy: NIM_ADD times out but may still have
+    // landed. Documented handling is retry, probing with NIM_MODIFY.
+    for (int i = 0; i < 8; i++) {
+        if (Shell_NotifyIconW(NIM_ADD, &g_nid)) return TRUE;
+        if (GetLastError() != ERROR_TIMEOUT) return FALSE;
+        if (Shell_NotifyIconW(NIM_MODIFY, &g_nid)) return TRUE;
+        Sleep(500);
     }
-    
-    Shell_NotifyIconW(NIM_MODIFY, &nid);
+    return FALSE;
 }
 
-HMENU CreateOverlaySettingsMenu(void)
+void TrayUpdate(void)
 {
-    HMENU hSubmenu = CreatePopupMenu();
-    
-    // Size submenu
-    HMENU hSizeMenu = CreatePopupMenu();
-    AppendMenuW(hSizeMenu, (g_appState.settings.overlaySize == SIZE_SUPER_SMALL) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_SIZE_SUPER_SMALL, L"Super Small (16px)");
-    AppendMenuW(hSizeMenu, (g_appState.settings.overlaySize == SIZE_SMALL) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_SIZE_SMALL, L"Small (32px)");
-    AppendMenuW(hSizeMenu, (g_appState.settings.overlaySize == SIZE_MEDIUM) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_SIZE_MEDIUM, L"Medium (64px)");
-    AppendMenuW(hSizeMenu, (g_appState.settings.overlaySize == SIZE_LARGE) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_SIZE_LARGE, L"Large (96px)");
-    
-    // Position submenu
-    HMENU hPosMenu = CreatePopupMenu();
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_TOP_LEFT) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_TOP_LEFT, L"Top-Left");
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_TOP_CENTER) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_TOP_CENTER, L"Top-Center");
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_TOP_RIGHT) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_TOP_RIGHT, L"Top-Right");
-    AppendMenuW(hPosMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_CENTER_LEFT) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_CENTER_LEFT, L"Center-Left");
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_CENTER_CENTER) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_CENTER_CENTER, L"Center");
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_CENTER_RIGHT) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_CENTER_RIGHT, L"Center-Right");
-    AppendMenuW(hPosMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_BOTTOM_LEFT) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_BOTTOM_LEFT, L"Bottom-Left");
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_BOTTOM_CENTER) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_BOTTOM_CENTER, L"Bottom-Center");
-    AppendMenuW(hPosMenu, (g_appState.settings.overlayPosition == POS_BOTTOM_RIGHT) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_POS_BOTTOM_RIGHT, L"Bottom-Right");
-    
-    // Add to main submenu
-    AppendMenuW(hSubmenu, MF_STRING | MF_POPUP, (UINT_PTR)hSizeMenu, L"Size");
-    AppendMenuW(hSubmenu, MF_STRING | MF_POPUP, (UINT_PTR)hPosMenu, L"Position");
-    AppendMenuW(hSubmenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hSubmenu, g_appState.settings.multiMonitorMode ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_MULTIMONITOR_TOGGLE, L"All Monitors");
-    
-    return hSubmenu;
+    wchar_t hk[64];
+    FormatHotkeyName(hk, ARRAYSIZE(hk), g_appState.settings.currentHotkey,
+                     g_appState.settings.customHotkeyModifiers, g_appState.settings.customHotkeyVK);
+    g_nid.uFlags = NIF_ICON | NIF_TIP;
+    g_nid.hIcon = g_appState.isMuted ? g_iconMuted : g_iconLive;
+    wsprintfW(g_nid.szTip, L"%s - %s (%s)%s", APP_NAME,
+              g_appState.isMuted ? L"Muted" : L"Live", hk,
+              g_appState.settings.volumeLockEnabled ? L" * volume locked" : L"");
+    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
 }
 
-HMENU CreateAudioSettingsMenu(void)
+void TrayRefreshTheme(void)
 {
-    HMENU hSubmenu = CreatePopupMenu();
-    
-    // Audio settings menu
-    AppendMenuW(hSubmenu, g_appState.settings.audioFeedbackEnabled ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_AUDIO_FEEDBACK_TOGGLE, L"Audio Feedback");
-    AppendMenuW(hSubmenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hSubmenu, g_appState.settings.reduceVolumeWhenMuted ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_REDUCE_VOLUME_TOGGLE, L"Reduce System Volume When Muted");
-    
-    return hSubmenu;
+    BuildIcons();
+    TrayUpdate();
 }
 
-HMENU CreateHotkeySettingsMenu(void)
+void TrayBalloon(const wchar_t* title, const wchar_t* text)
 {
-    HMENU hSubmenu = CreatePopupMenu();
-    
-    // F-key options
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F1) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F1, L"F1");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F2) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F2, L"F2");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F3) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F3, L"F3");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F4) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F4, L"F4");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F5) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F5, L"F5");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F6) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F6, L"F6");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F7) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F7, L"F7");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F8) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F8, L"F8");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F9) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F9, L"F9");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F10) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F10, L"F10");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F11) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F11, L"F11");
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_F12) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_F12, L"F12");
-    
-    AppendMenuW(hSubmenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hSubmenu, (g_appState.settings.currentHotkey == HOTKEY_CTRL_M) ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_HOTKEY_CTRL_M, L"Ctrl+M");
-    
-    AppendMenuW(hSubmenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hSubmenu, MF_STRING | MF_GRAYED, 
-                ID_MENU_HOTKEY_CUSTOM, L"Custom Hotkey COMING SOON");
-    
-    return hSubmenu;
+    g_nid.uFlags = NIF_INFO;
+    g_nid.dwInfoFlags = NIIF_INFO;
+    wcscpy_s(g_nid.szInfoTitle, ARRAYSIZE(g_nid.szInfoTitle), title);
+    wcscpy_s(g_nid.szInfo, ARRAYSIZE(g_nid.szInfo), text);
+    Shell_NotifyIconW(NIM_MODIFY, &g_nid);
 }
 
-HMENU CreateStartupSettingsMenu(void)
+static void AddItem(HMENU m, UINT id, const wchar_t* text, BOOL checked)
 {
-    HMENU hSubmenu = CreatePopupMenu();
-    
-    AppendMenuW(hSubmenu, g_appState.settings.startupEnabled ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_STARTUP_ENABLE, L"Enable Startup");
-    AppendMenuW(hSubmenu, !g_appState.settings.startupEnabled ? MF_STRING | MF_CHECKED : MF_STRING, 
-                ID_MENU_STARTUP_DISABLE, L"Disable Startup");
-    
-    return hSubmenu;
+    AppendMenuW(m, MF_STRING | (checked ? MF_CHECKED : 0), id, text);
 }
 
-void ShowTrayMenu(HWND hwnd, POINT pt)
+void TrayShowMenu(HWND hwnd, POINT pt)
 {
+    const AppSettings* s = &g_appState.settings;
+
+    static const wchar_t* kSizeNames[] = {L"Tiny (16 px)", L"Small (32 px)", L"Medium (64 px)", L"Large (96 px)"};
+    static const wchar_t* kPosNames[POS_COUNT] = {
+        L"Top-Left",    L"Top-Center", L"Top-Right",
+        L"Center-Left", L"Center",     L"Center-Right",
+        L"Bottom-Left", L"Bottom-Center", L"Bottom-Right"};
+
+    HMENU sizeM = CreatePopupMenu();
+    for (int i = 0; i < ARRAYSIZE(kOverlaySizes); i++)
+        AddItem(sizeM, ID_MENU_SIZE_FIRST + i, kSizeNames[i], s->overlaySize == kOverlaySizes[i]);
+
+    HMENU posM = CreatePopupMenu();
+    for (int i = 0; i < POS_COUNT; i++) {
+        if (i && i % 3 == 0) AppendMenuW(posM, MF_SEPARATOR, 0, NULL);
+        AddItem(posM, ID_MENU_POS_FIRST + i, kPosNames[i], s->overlayPosition == (OverlayPosition)i);
+    }
+
+    HMENU overlay = CreatePopupMenu();
+    AppendMenuW(overlay, MF_POPUP, (UINT_PTR)sizeM, L"Size");
+    AppendMenuW(overlay, MF_POPUP, (UINT_PTR)posM, L"Position");
+    AppendMenuW(overlay, MF_SEPARATOR, 0, NULL);
+    AddItem(overlay, ID_MENU_MULTIMONITOR, L"Show on All Monitors", s->multiMonitorMode);
+
+    HMENU sound = CreatePopupMenu();
+    AddItem(sound, ID_MENU_SOUND_FEEDBACK, L"Sound Feedback", s->audioFeedbackEnabled);
+    AddItem(sound, ID_MENU_DUCK_VOLUME, L"Duck System Volume While Muted", s->reduceVolumeWhenMuted);
+
+    HMENU hotkey = CreatePopupMenu();
+    wchar_t label[80];
+    for (int i = 0; i < 12; i++) {
+        wsprintfW(label, L"F%d", i + 1);
+        AddItem(hotkey, ID_MENU_HOTKEY_F1 + i, label, s->currentHotkey == (DWORD)(VK_F1 + i));
+    }
+    AppendMenuW(hotkey, MF_SEPARATOR, 0, NULL);
+    AddItem(hotkey, ID_MENU_HOTKEY_CTRL_M, L"Ctrl+M", s->currentHotkey == HOTKEY_CTRL_M);
+    if (s->currentHotkey == HOTKEY_CUSTOM) {
+        wchar_t hk[48];
+        FormatHotkeyName(hk, ARRAYSIZE(hk), HOTKEY_CUSTOM, s->customHotkeyModifiers, s->customHotkeyVK);
+        wsprintfW(label, L"Custom: %s", hk);
+        AddItem(hotkey, ID_MENU_HOTKEY_CUSTOM, label, TRUE);
+    } else {
+        AddItem(hotkey, ID_MENU_HOTKEY_CUSTOM, L"Set Custom...", FALSE);
+    }
+
+    HMENU menu = CreatePopupMenu();
+    AppendMenuW(menu, MF_STRING, ID_MENU_TOGGLE,
+                g_appState.isMuted ? L"Unmute Microphone" : L"Mute Microphone");
+    SetMenuDefaultItem(menu, ID_MENU_TOGGLE, FALSE);
+    AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+    AddItem(menu, ID_MENU_VOLUME_LOCK, L"Lock Mic Volume", s->volumeLockEnabled);
+    AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)overlay, L"Overlay");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)sound, L"Sound");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)hotkey, L"Hotkey");
+    AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+    AddItem(menu, ID_MENU_STARTUP, L"Start with Windows", s->startupEnabled);
+    AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(menu, MF_STRING, ID_MENU_ABOUT, L"About");
+    AppendMenuW(menu, MF_STRING, ID_MENU_EXIT, L"Exit");
+
     SetForegroundWindow(hwnd);
-    
-    HMENU hMenu = CreatePopupMenu();
-    
-    // Main toggle option
-    if (g_appState.isMuted) {
-        AppendMenuW(hMenu, MF_STRING, ID_MENU_TOGGLE, L"Unmute Microphone");
-    } else {
-        AppendMenuW(hMenu, MF_STRING, ID_MENU_TOGGLE, L"Mute Microphone");
-    }
-    
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Volume lock option
-    if (g_appState.settings.volumeLockEnabled) {
-        AppendMenuW(hMenu, MF_STRING | MF_CHECKED, ID_MENU_VOLUME_LOCK_TOGGLE, L"MIC Volume Lock");
-    } else {
-        AppendMenuW(hMenu, MF_STRING, ID_MENU_VOLUME_LOCK_TOGGLE, L"MIC Volume Lock");
-    }
-    
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    
-    // Settings submenus
-    HMENU hOverlayMenu = CreateOverlaySettingsMenu();
-    HMENU hAudioMenu = CreateAudioSettingsMenu();
-    HMENU hHotkeyMenu = CreateHotkeySettingsMenu();
-    HMENU hStartupMenu = CreateStartupSettingsMenu();
-    
-    AppendMenuW(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hOverlayMenu, L"Overlay Settings");
-    AppendMenuW(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hAudioMenu, L"Audio Settings");
-    AppendMenuW(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hHotkeyMenu, L"Hotkey Settings");
-    AppendMenuW(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hStartupMenu, L"Startup Settings");
-    
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hMenu, MF_STRING, ID_MENU_ABOUT, L"About");
-    AppendMenuW(hMenu, MF_STRING, ID_MENU_EXIT, L"Exit");
-    
-    TrackPopupMenu(hMenu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
-    DestroyMenu(hMenu);
+    TrackPopupMenu(menu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
+    PostMessageW(hwnd, WM_NULL, 0, 0);   // lets the menu dismiss correctly
+    DestroyMenu(menu);                   // destroys submenus recursively
 }
 
-void CleanupSystemTray(void)
+void TrayCleanup(void)
 {
-    NOTIFYICONDATAW nid = {0};
-    nid.cbSize = sizeof(NOTIFYICONDATAW);
-    nid.hWnd = g_appState.hWnd;
-    nid.uID = 1;
-    
-    Shell_NotifyIconW(NIM_DELETE, &nid);
+    Shell_NotifyIconW(NIM_DELETE, &g_nid);
+    if (g_iconMuted) { DestroyIcon(g_iconMuted); g_iconMuted = NULL; }
+    if (g_iconLive)  { DestroyIcon(g_iconLive);  g_iconLive = NULL; }
 }

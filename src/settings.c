@@ -1,121 +1,115 @@
+// settings.c - registry persistence. One table drives both load and save;
+// loaded values are validated so a corrupted registry can never break the UI.
+// Key and value names are unchanged from v1.x, so settings carry over.
 #include "micmute.h"
 
 #define REGISTRY_KEY L"SOFTWARE\\iAlturki\\MicMute"
-#define STARTUP_KEY L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
-#define APP_NAME L"iAlturki-MicMute"
+#define STARTUP_KEY  L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
 
-void InitializeDefaultSettings(void)
+typedef struct { const wchar_t* name; void* ptr; DWORD type; DWORD size; } RegEntry;
+
+#define S g_appState.settings
+static const RegEntry kRegMap[] = {
+    {L"OverlaySize",           &S.overlaySize,            REG_DWORD,  sizeof(DWORD)},
+    {L"OverlayPosition",       &S.overlayPosition,        REG_DWORD,  sizeof(DWORD)},
+    {L"MultiMonitorMode",      &S.multiMonitorMode,       REG_DWORD,  sizeof(DWORD)},
+    {L"AudioFeedbackEnabled",  &S.audioFeedbackEnabled,   REG_DWORD,  sizeof(DWORD)},
+    {L"ReduceVolumeWhenMuted", &S.reduceVolumeWhenMuted,  REG_DWORD,  sizeof(DWORD)},
+    {L"CurrentHotkey",         &S.currentHotkey,          REG_DWORD,  sizeof(DWORD)},
+    {L"CustomHotkeyModifiers", &S.customHotkeyModifiers,  REG_DWORD,  sizeof(DWORD)},
+    {L"CustomHotkeyVK",        &S.customHotkeyVK,         REG_DWORD,  sizeof(DWORD)},
+    {L"VolumeLockEnabled",     &S.volumeLockEnabled,      REG_DWORD,  sizeof(DWORD)},
+    {L"LastMuteState",         &S.lastMuteState,          REG_DWORD,  sizeof(DWORD)},
+    {L"StartupEnabled",        &S.startupEnabled,         REG_DWORD,  sizeof(DWORD)},
+    {L"LockedVolume",          &S.lockedVolume,           REG_BINARY, sizeof(float)},
+};
+
+static void Defaults(void)
 {
-    g_appState.settings.overlaySize = SIZE_MEDIUM;
-    g_appState.settings.overlayPosition = POS_TOP_RIGHT;
-    g_appState.settings.multiMonitorMode = TRUE; // All monitors by default
-    g_appState.settings.animationSpeed = ANIM_NORMAL;
-    g_appState.settings.autoHideDuration = 2000; // 2 seconds
-    g_appState.settings.audioFeedbackEnabled = TRUE;
-    g_appState.settings.reduceVolumeWhenMuted = FALSE; // OFF by default
-    g_appState.settings.currentHotkey = HOTKEY_F8;
-    g_appState.settings.customHotkeyModifiers = MOD_CONTROL | MOD_SHIFT;
-    g_appState.settings.customHotkeyVK = VK_F12; // Default custom: Ctrl+Shift+F12
-    g_appState.settings.startupEnabled = FALSE;
-    g_appState.settings.volumeLockEnabled = FALSE;
-    g_appState.settings.lockedVolume = 1.0f;
-    g_appState.settings.volumeCheckInterval = 500; // Check every 500ms for more reliability
-    g_appState.settings.lastMuteState = FALSE; // Default to unmuted
+    S.overlaySize = 64;
+    S.overlayPosition = POS_TOP_RIGHT;
+    S.multiMonitorMode = TRUE;
+    S.audioFeedbackEnabled = TRUE;
+    S.reduceVolumeWhenMuted = FALSE;
+    S.currentHotkey = VK_F8;
+    S.customHotkeyModifiers = MOD_CONTROL | MOD_SHIFT;
+    S.customHotkeyVK = VK_F12;
+    S.startupEnabled = FALSE;
+    S.volumeLockEnabled = FALSE;
+    S.lockedVolume = 1.0f;
+    S.lastMuteState = FALSE;
+}
+
+static void Validate(void)
+{
+    BOOL sizeOk = FALSE;
+    for (int i = 0; i < ARRAYSIZE(kOverlaySizes); i++)
+        if (S.overlaySize == kOverlaySizes[i]) sizeOk = TRUE;
+    if (!sizeOk) S.overlaySize = 64;
+
+    if ((DWORD)S.overlayPosition >= POS_COUNT) S.overlayPosition = POS_TOP_RIGHT;
+
+    S.customHotkeyModifiers &= MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN;
+    BOOL customOk = S.customHotkeyVK >= 0x08 && S.customHotkeyVK <= 0xFE;
+    BOOL hkOk = (S.currentHotkey >= VK_F1 && S.currentHotkey <= VK_F12)
+                || S.currentHotkey == HOTKEY_CTRL_M
+                || (S.currentHotkey == HOTKEY_CUSTOM && customOk);
+    if (!hkOk) S.currentHotkey = VK_F8;
+
+    if (!(S.lockedVolume >= 0.0f && S.lockedVolume <= 1.0f)) S.lockedVolume = 1.0f;
 }
 
 void LoadSettings(void)
 {
-    HKEY hKey;
-    DWORD dwType, dwSize;
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        dwSize = sizeof(DWORD);
-        
-        RegQueryValueExW(hKey, L"OverlaySize", NULL, &dwType, (LPBYTE)&g_appState.settings.overlaySize, &dwSize);
-        RegQueryValueExW(hKey, L"OverlayPosition", NULL, &dwType, (LPBYTE)&g_appState.settings.overlayPosition, &dwSize);
-        RegQueryValueExW(hKey, L"MultiMonitorMode", NULL, &dwType, (LPBYTE)&g_appState.settings.multiMonitorMode, &dwSize);
-        RegQueryValueExW(hKey, L"AnimationSpeed", NULL, &dwType, (LPBYTE)&g_appState.settings.animationSpeed, &dwSize);
-        RegQueryValueExW(hKey, L"AutoHideDuration", NULL, &dwType, (LPBYTE)&g_appState.settings.autoHideDuration, &dwSize);
-        RegQueryValueExW(hKey, L"AudioFeedbackEnabled", NULL, &dwType, (LPBYTE)&g_appState.settings.audioFeedbackEnabled, &dwSize);
-        RegQueryValueExW(hKey, L"ReduceVolumeWhenMuted", NULL, &dwType, (LPBYTE)&g_appState.settings.reduceVolumeWhenMuted, &dwSize);
-        RegQueryValueExW(hKey, L"CurrentHotkey", NULL, &dwType, (LPBYTE)&g_appState.settings.currentHotkey, &dwSize);
-        RegQueryValueExW(hKey, L"CustomHotkeyModifiers", NULL, &dwType, (LPBYTE)&g_appState.settings.customHotkeyModifiers, &dwSize);
-        RegQueryValueExW(hKey, L"CustomHotkeyVK", NULL, &dwType, (LPBYTE)&g_appState.settings.customHotkeyVK, &dwSize);
-        RegQueryValueExW(hKey, L"VolumeLockEnabled", NULL, &dwType, (LPBYTE)&g_appState.settings.volumeLockEnabled, &dwSize);
-        RegQueryValueExW(hKey, L"VolumeCheckInterval", NULL, &dwType, (LPBYTE)&g_appState.settings.volumeCheckInterval, &dwSize);
-        RegQueryValueExW(hKey, L"LastMuteState", NULL, &dwType, (LPBYTE)&g_appState.settings.lastMuteState, &dwSize);
-        
-        dwSize = sizeof(float);
-        RegQueryValueExW(hKey, L"LockedVolume", NULL, &dwType, (LPBYTE)&g_appState.settings.lockedVolume, &dwSize);
-        
-        RegCloseKey(hKey);
+    Defaults();
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+        for (int i = 0; i < ARRAYSIZE(kRegMap); i++) {
+            DWORD size = kRegMap[i].size;
+            RegQueryValueExW(key, kRegMap[i].name, NULL, NULL, (LPBYTE)kRegMap[i].ptr, &size);
+        }
+        RegCloseKey(key);
     }
-    
-    // Check startup setting separately and sync with our registry
-    BOOL actualStartup = IsStartupEnabled();
-    g_appState.settings.startupEnabled = actualStartup;
+    Validate();
+    S.startupEnabled = IsStartupEnabled();   // the Run key is the truth
 }
 
 void SaveSettings(void)
 {
-    HKEY hKey;
-    DWORD dwDisposition;
-    
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY, 0, NULL, 0, KEY_WRITE, NULL, &hKey, &dwDisposition) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, L"OverlaySize", 0, REG_DWORD, (LPBYTE)&g_appState.settings.overlaySize, sizeof(DWORD));
-        RegSetValueExW(hKey, L"OverlayPosition", 0, REG_DWORD, (LPBYTE)&g_appState.settings.overlayPosition, sizeof(DWORD));
-        RegSetValueExW(hKey, L"MultiMonitorMode", 0, REG_DWORD, (LPBYTE)&g_appState.settings.multiMonitorMode, sizeof(DWORD));
-        RegSetValueExW(hKey, L"AnimationSpeed", 0, REG_DWORD, (LPBYTE)&g_appState.settings.animationSpeed, sizeof(DWORD));
-        RegSetValueExW(hKey, L"AutoHideDuration", 0, REG_DWORD, (LPBYTE)&g_appState.settings.autoHideDuration, sizeof(DWORD));
-        RegSetValueExW(hKey, L"AudioFeedbackEnabled", 0, REG_DWORD, (LPBYTE)&g_appState.settings.audioFeedbackEnabled, sizeof(DWORD));
-        RegSetValueExW(hKey, L"ReduceVolumeWhenMuted", 0, REG_DWORD, (LPBYTE)&g_appState.settings.reduceVolumeWhenMuted, sizeof(DWORD));
-        RegSetValueExW(hKey, L"CurrentHotkey", 0, REG_DWORD, (LPBYTE)&g_appState.settings.currentHotkey, sizeof(DWORD));
-        RegSetValueExW(hKey, L"CustomHotkeyModifiers", 0, REG_DWORD, (LPBYTE)&g_appState.settings.customHotkeyModifiers, sizeof(DWORD));
-        RegSetValueExW(hKey, L"CustomHotkeyVK", 0, REG_DWORD, (LPBYTE)&g_appState.settings.customHotkeyVK, sizeof(DWORD));
-        RegSetValueExW(hKey, L"VolumeLockEnabled", 0, REG_DWORD, (LPBYTE)&g_appState.settings.volumeLockEnabled, sizeof(DWORD));
-        RegSetValueExW(hKey, L"VolumeCheckInterval", 0, REG_DWORD, (LPBYTE)&g_appState.settings.volumeCheckInterval, sizeof(DWORD));
-        RegSetValueExW(hKey, L"StartupEnabled", 0, REG_DWORD, (LPBYTE)&g_appState.settings.startupEnabled, sizeof(DWORD));
-        RegSetValueExW(hKey, L"LastMuteState", 0, REG_DWORD, (LPBYTE)&g_appState.settings.lastMuteState, sizeof(DWORD));
-        RegSetValueExW(hKey, L"LockedVolume", 0, REG_BINARY, (LPBYTE)&g_appState.settings.lockedVolume, sizeof(float));
-        
-        RegCloseKey(hKey);
-    }
+    HKEY key;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY, 0, NULL, 0, KEY_WRITE, NULL, &key, NULL) != ERROR_SUCCESS)
+        return;
+    for (int i = 0; i < ARRAYSIZE(kRegMap); i++)
+        RegSetValueExW(key, kRegMap[i].name, 0, kRegMap[i].type, (const BYTE*)kRegMap[i].ptr, kRegMap[i].size);
+    RegCloseKey(key);
 }
 
 BOOL IsStartupEnabled(void)
 {
-    HKEY hKey;
+    HKEY key;
     BOOL enabled = FALSE;
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        DWORD dwType, dwSize = 0;
-        if (RegQueryValueExW(hKey, APP_NAME, NULL, &dwType, NULL, &dwSize) == ERROR_SUCCESS) {
-            enabled = TRUE;
-        }
-        RegCloseKey(hKey);
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_READ, &key) == ERROR_SUCCESS) {
+        enabled = RegQueryValueExW(key, APP_NAME, NULL, NULL, NULL, NULL) == ERROR_SUCCESS;
+        RegCloseKey(key);
     }
-    
     return enabled;
 }
 
 void EnableStartup(BOOL enable)
 {
-    HKEY hKey;
-    
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, STARTUP_KEY, 0, KEY_WRITE, &key) == ERROR_SUCCESS) {
         if (enable) {
-            wchar_t exePath[MAX_PATH];
-            GetModuleFileNameW(NULL, exePath, MAX_PATH);
-            
-            // Add the application to startup
-            RegSetValueExW(hKey, APP_NAME, 0, REG_SZ, (LPBYTE)exePath, (wcslen(exePath) + 1) * sizeof(wchar_t));
+            wchar_t cmd[MAX_PATH + 2] = L"\"";
+            GetModuleFileNameW(NULL, cmd + 1, MAX_PATH);
+            wcscat_s(cmd, ARRAYSIZE(cmd), L"\"");
+            RegSetValueExW(key, APP_NAME, 0, REG_SZ, (const BYTE*)cmd,
+                           (DWORD)((wcslen(cmd) + 1) * sizeof(wchar_t)));
         } else {
-            // Remove from startup
-            RegDeleteValueW(hKey, APP_NAME);
+            RegDeleteValueW(key, APP_NAME);
         }
-        RegCloseKey(hKey);
+        RegCloseKey(key);
     }
-    
-    g_appState.settings.startupEnabled = enable;
+    S.startupEnabled = enable;
     SaveSettings();
 }
