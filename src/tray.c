@@ -53,15 +53,15 @@ BOOL TrayInit(HWND hwnd)
     g_nid.hIcon = g_appState.isMuted ? g_iconMuted : g_iconLive;
     wcscpy_s(g_nid.szTip, ARRAYSIZE(g_nid.szTip), APP_NAME);
 
-    // At logon the shell can be busy: NIM_ADD times out but may still have
-    // landed. Documented handling is retry, probing with NIM_MODIFY.
-    for (int i = 0; i < 8; i++) {
-        if (Shell_NotifyIconW(NIM_ADD, &g_nid)) return TRUE;
-        if (GetLastError() != ERROR_TIMEOUT) return FALSE;
-        if (Shell_NotifyIconW(NIM_MODIFY, &g_nid)) return TRUE;
-        Sleep(500);
-    }
-    return FALSE;
+    // One non-blocking attempt; the caller retries on a timer. At logon the
+    // autostart task often runs before Explorer has created the taskbar, so
+    // failure here is expected and must never be fatal.
+    if (!FindWindowW(L"Shell_TrayWnd", NULL))
+        return FALSE;                     // shell not up yet
+    if (Shell_NotifyIconW(NIM_ADD, &g_nid))
+        return TRUE;
+    // Busy shell: NIM_ADD can time out but still have landed - probe it.
+    return GetLastError() == ERROR_TIMEOUT && Shell_NotifyIconW(NIM_MODIFY, &g_nid);
 }
 
 void TrayUpdate(void)

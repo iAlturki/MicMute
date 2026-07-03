@@ -61,10 +61,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     else                       g_appState.isMuted = g_appState.settings.lastMuteState;
     RestoreLockedVolume();   // enforce a persisted volume lock against drift while closed
 
-    if (!TrayInit(g_appState.hWnd)) {
-        MessageBoxW(NULL, L"Failed to create tray icon.", APP_NAME, MB_OK | MB_ICONERROR);
-        return 1;
-    }
+    // Never fatal: at logon we may start before Explorer's taskbar exists.
+    // Retry on a timer (and on TaskbarCreated) until the icon lands; the
+    // hotkey and overlay work the whole time.
+    if (!TrayInit(g_appState.hWnd))
+        SetTimer(g_appState.hWnd, TRAY_RETRY_TIMER_ID, 2000, NULL);
     SyncMuteUI();
     RegisterCurrentHotkey();
 
@@ -175,6 +176,13 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     switch (uMsg) {
         case WM_HOTKEY:
             if (wParam == HOTKEY_ID) ToggleMicrophone();
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == TRAY_RETRY_TIMER_ID && TrayInit(hwnd)) {
+                KillTimer(hwnd, TRAY_RETRY_TIMER_ID);
+                TrayUpdate();
+            }
             return 0;
 
         case WM_APP_TRAY:

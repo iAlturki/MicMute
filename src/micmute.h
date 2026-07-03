@@ -11,7 +11,7 @@
 #include <math.h>
 
 #define APP_NAME        L"iAlturki-MicMute"
-#define APP_VERSION     L"2.1.0"
+#define APP_VERSION     L"2.1.1"
 #define APP_URL         L"https://github.com/iAlturki/MicMute"
 
 // Window messages
@@ -20,6 +20,7 @@
 #define WM_APP_DEVICE   (WM_APP + 3)  // default capture device changed
 
 #define HOTKEY_ID 1
+#define TRAY_RETRY_TIMER_ID 1
 
 // Menu IDs (size/position/hotkey ranges are contiguous and decoded arithmetically)
 #define ID_MENU_TOGGLE          1001
