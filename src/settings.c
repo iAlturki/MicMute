@@ -113,6 +113,13 @@ static void RemoveLegacyRunEntry(void)
         RegDeleteValueW(key, APP_NAME);
         RegCloseKey(key);
     }
+    // Explorer's per-entry enable/disable state for the old Run value
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run",
+                      0, KEY_WRITE, &key) == ERROR_SUCCESS) {
+        RegDeleteValueW(key, APP_NAME);
+        RegCloseKey(key);
+    }
 }
 
 BOOL IsStartupEnabled(void)

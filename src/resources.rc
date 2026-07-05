@@ -8,8 +8,8 @@
 
 // Version information
 1 VERSIONINFO
-FILEVERSION 2,1,1,0
-PRODUCTVERSION 2,1,1,0
+FILEVERSION 2,1,2,0
+PRODUCTVERSION 2,1,2,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -22,12 +22,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "iAlturki"
             VALUE "FileDescription", "Microphone Mute Utility for Windows"
-            VALUE "FileVersion", "2.1.1"
+            VALUE "FileVersion", "2.1.2"
             VALUE "InternalName", "iAlturki-MicMute"
             VALUE "LegalCopyright", "Copyright (C) 2025 iAlturki"
             VALUE "OriginalFilename", "iAlturki-MicMute.exe"
             VALUE "ProductName", "iAlturki-MicMute"
-            VALUE "ProductVersion", "2.1.1"
+            VALUE "ProductVersion", "2.1.2"
             VALUE "Comments", "Visit: https://github.com/iAlturki"
         END
     END

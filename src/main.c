@@ -67,6 +67,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (!TrayInit(g_appState.hWnd))
         SetTimer(g_appState.hWnd, TRAY_RETRY_TIMER_ID, 2000, NULL);
     SyncMuteUI();
+
+    // Self-heal autostart: if enabled, re-point the task at THIS exe shortly
+    // after launch, so a stale path (old download, moved file) can never be
+    // what logon runs. Deferred off the startup-critical path.
+    SetTimer(g_appState.hWnd, STARTUP_SYNC_TIMER_ID, 5000, NULL);
     RegisterCurrentHotkey();
 
     MSG msg;
@@ -182,6 +187,9 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
             if (wParam == TRAY_RETRY_TIMER_ID && TrayInit(hwnd)) {
                 KillTimer(hwnd, TRAY_RETRY_TIMER_ID);
                 TrayUpdate();
+            } else if (wParam == STARTUP_SYNC_TIMER_ID) {
+                KillTimer(hwnd, STARTUP_SYNC_TIMER_ID);
+                if (IsStartupEnabled()) EnableStartup(TRUE);   // rewrite task -> this exe
             }
             return 0;
 
