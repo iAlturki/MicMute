@@ -3,6 +3,7 @@
 🎙️ A tiny, dependency-free microphone mute utility for Windows with a beautiful on-screen overlay and an event-driven audio engine.
 
 [![Download Latest Release](https://img.shields.io/github/v/release/iAlturki/MicMute?label=Download&style=for-the-badge&color=brightgreen)](https://github.com/iAlturki/MicMute/releases/latest/download/iAlturki-MicMute.exe)
+[![Downloads](https://img.shields.io/github/downloads/iAlturki/MicMute/total?label=release%20downloads&style=for-the-badge&color=555)](https://github.com/iAlturki/MicMute/releases)
 
 <img src="assets/overlay-demo.gif" width="224" alt="Mute, background melt, and unmute flash demo">
 
@@ -28,6 +29,19 @@
 - **Volume controls** – Optional mic volume lock (re-asserts a locked level) and optional system-volume ducking while muted.
 - **Settings that stick** – Persisted in the registry (`HKCU\SOFTWARE\iAlturki\MicMute`) and validated on load; v1 settings carry over. Start-with-Windows toggle. Single instance — launching a second copy pings the running one.
 
+## How it works
+
+Plain C on Win32, about 1,800 lines in `src/`.
+
+- **Event-driven Core Audio, with COM written by hand in C.** `IAudioEndpointVolumeCallback` and `IMMNotificationClient` are implemented with hand-built vtables. Every write MicMute makes carries a private event-context GUID, and the callback drops those events before anything crosses threads, so MicMute never reacts to its own changes ([`audio.c`, lines 37 to 47](https://github.com/iAlturki/MicMute/blob/9a054c4e7bc8413cf76cac2093fd71ef5e03c3bc/src/audio.c#L37-L47)).
+- **One thread owns the state.** Callbacks arrive on Core Audio worker threads and only `PostMessage` to the UI thread, which re-reads the real mute state before changing anything ([`main.c`, lines 208 to 219](https://github.com/iAlturki/MicMute/blob/9a054c4e7bc8413cf76cac2093fd71ef5e03c3bc/src/main.c#L208-L219)). No locks.
+- **The overlay.** One click-through, topmost, no-activate layered window per monitor. GDI+'s flat C API is declared by hand ([`render.c`](https://github.com/iAlturki/MicMute/blob/9a054c4e7bc8413cf76cac2093fd71ef5e03c3bc/src/render.c#L18-L40)) and draws straight into the DIB that `UpdateLayeredWindow` presents. The slash is cut into the glyph with `SourceCopy` compositing, so the mic still looks severed after the plate melts away.
+- **Zero CPU at rest.** The animation timer runs only during transitions and is killed when the badge settles ([`overlay.c`, line 252](https://github.com/iAlturki/MicMute/blob/9a054c4e7bc8413cf76cac2093fd71ef5e03c3bc/src/overlay.c#L252)).
+- **The cues are synthesized:** a hand-written 44-byte WAV header plus 200 ms of 16-bit PCM, played from memory ([`audio.c`, lines 205 to 237](https://github.com/iAlturki/MicMute/blob/9a054c4e7bc8413cf76cac2093fd71ef5e03c3bc/src/audio.c#L205-L237)).
+- **Running elevated has consequences, and each is handled:** exactly two tray messages are let through UIPI ([`tray.c`, lines 42 to 43](https://github.com/iAlturki/MicMute/blob/9a054c4e7bc8413cf76cac2093fd71ef5e03c3bc/src/tray.c#L42-L43)), autostart uses a Task Scheduler task, and the tray icon retries at logon until Explorer is up and comes back after Explorer restarts.
+
+Write-ups with interactive demos: [444005129.xyz](https://444005129.xyz/#micmute).
+
 ## Installation
 
 1. Download `iAlturki-MicMute.exe` from [Releases](../../releases)
@@ -41,7 +55,7 @@ The default hotkey is **F8**. To change it, right-click the tray icon and pick a
 ## System Requirements
 
 - Windows 10/11
-- Single small executable, no dependencies
+- One 159 KB executable: no installer, no third-party libraries, no VC++ redistributable (static CRT; links only Windows system DLLs)
 - Minimal CPU/RAM usage
 - Runs elevated (one UAC prompt at launch) so the hotkey keeps working while
   admin apps or fullscreen games have focus; "Start with Windows" uses a
