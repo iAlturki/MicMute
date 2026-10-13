@@ -1,6 +1,9 @@
 <!-- AI setup by iAlturki -->
 <p align="center">
-  <img src="assets/logo.svg" width="76" alt="MicMute logo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo.png">
+    <img src="assets/logo-light.png" width="76" alt="MicMute live tray icon">
+  </picture>
   &nbsp;&nbsp;
   <a href="https://ialturki.github.io/MicMute/agent-setup/"><img src="assets/ai-setup.svg" width="330" alt="Set up with your AI agent — open the setup prompt copier"></a>
 </p>
