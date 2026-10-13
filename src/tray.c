@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Copyright (c) 2026 iAlturki
 // tray.c - notification icon and menu. Icons are rendered at runtime (red
 // badge when muted, theme-aware glyph with green dot when live), the icon
 // survives Explorer restarts via TaskbarCreated, and menus are built from

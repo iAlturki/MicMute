@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Copyright (c) 2026 iAlturki
 // settings.c - registry persistence. One table drives both load and save;
 // loaded values are validated so a corrupted registry can never break the UI.
 // Key and value names are unchanged from v1.x, so settings carry over.

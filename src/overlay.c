@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Copyright (c) 2026 iAlturki
 // overlay.c - on-screen mute badge. One layered window per monitor (true
 // per-pixel alpha via UpdateLayeredWindow), per-monitor DPI scaling, and a
 // small animation engine. Muted timeline: fade/slide in -> badge plate holds

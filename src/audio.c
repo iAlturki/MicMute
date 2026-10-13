@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Copyright (c) 2026 iAlturki
 // audio.c - Core Audio, fully event-driven. A volume callback pushes external
 // mute/volume changes to the UI thread (no polling timers), and a device
 // notification client survives default-microphone hot-swaps. Changes made by

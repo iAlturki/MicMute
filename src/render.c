@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Copyright (c) 2026 iAlturki
 // render.c - all drawing. GDI+ flat API (C-callable) into premultiplied-ARGB
 // DIB sections, so overlays get true per-pixel alpha (soft shadows, antialiased
 // glyphs) and tray icons are generated at runtime instead of shipping bitmaps.

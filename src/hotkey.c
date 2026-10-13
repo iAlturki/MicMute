@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
+// Copyright (c) 2026 iAlturki
 // hotkey.c - global hotkey registration plus a real "press a combination"
 // capture window (dark rounded popup, live preview of held modifiers).
 #include "micmute.h"

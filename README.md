@@ -1,3 +1,12 @@
+<!-- AI setup by iAlturki -->
+<p align="center">
+  <img src="assets/logo.svg" width="76" alt="MicMute logo">
+  &nbsp;&nbsp;
+  <a href="https://ialturki.github.io/MicMute/agent-setup/"><img src="assets/ai-setup.svg" width="330" alt="Set up with your AI agent — open the setup prompt copier"></a>
+</p>
+<p align="center"><sub>Click the setup button, copy the prompt, and give it to your AI agent. <a href="docs/agent-setup/prompt.txt">Read the prompt</a>.</sub></p>
+<!-- /AI setup by iAlturki -->
+
 # iAlturki-MicMute
 
 🎙️ A tiny, dependency-free microphone mute utility for Windows with a beautiful on-screen overlay and an event-driven audio engine.
@@ -75,4 +84,7 @@ The result is a single `build\iAlturki-MicMute.exe`. Releases are also built aut
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file.
+CC BY-NC-SA 4.0 - see [LICENSE](LICENSE) file.
+
+
+Current original material is **CC BY-NC-SA 4.0 © iAlturki**. Earlier MIT releases retain their original terms; third-party material retains its own notices. See [NOTICE](NOTICE) and [LICENSES/previous-MIT.txt](LICENSES/previous-MIT.txt).
